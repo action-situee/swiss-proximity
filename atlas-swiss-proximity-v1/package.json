@@ -1,0 +1,22 @@
+{
+  "name": "swiss-proximity-atlas",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Swiss Proximity Atlas - Web application for visualizing proximity and accessibility across Switzerland",
+  "author": "pierreleripoll",
+  "license": "MIT",
+  "engines": {
+    "node": ">=16.0.0",
+    "npm": ">=8.0.0"
+  },
+  "scripts": {
+    "install:frontend": "cd frontend && npm install",
+    "dev": "cd frontend && npm run dev",
+    "build": "cd frontend && npm run build",
+    "test": "cd frontend && npm run test:unit",
+    "lint": "cd frontend && npm run lint",
+    "lint:check": "cd frontend && npm run lint:check",
+    "type-check": "cd frontend && npm run type-check",
+    "preview": "cd frontend && npm run preview"
+  }
+}

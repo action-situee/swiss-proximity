@@ -1,0 +1,20 @@
+.DS_Store
+**/.DS_Store
+
+**/node_modules/
+**/dist/
+**/.vite/
+
+**/__pycache__/
+**/.pytest_cache/
+**/.ipynb_checkpoints/
+**/.venv/
+**/venv/
+
+**/.git-backup-*/
+
+get-data-proximity/Data/
+get-data-proximity/Notebooks/cache/
+
+atlas-swiss-proximity-v1/data_processing/source_data/
+atlas-swiss-proximity-v1/Redesign urban proximity page.zip

@@ -1,0 +1,11 @@
+name: 💡 Product backlog item
+description: New development step
+title: "[PBI] <title>"
+labels: []
+body:
+- type: textarea
+  attributes:
+    label: Description 
+    description: Add a description...
+  validations:
+    required: false

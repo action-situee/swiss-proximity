@@ -1,0 +1,63 @@
+services:
+  reverse-proxy:
+    image: traefik:v2.8
+    command:
+      - "--providers.docker"
+      - "--providers.file.directory=/configuration/"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.web.http.redirections.entryPoint.to=websecure"
+      - "--entrypoints.web.http.redirections.entryPoint.scheme=https"
+      - "--entrypoints.web.http.redirections.entrypoint.permanent=true"
+      - "--entrypoints.websecure.address=:443"
+    environment:
+      - SSL_CERT_CRT=${SSL_CERT_CRT}
+      - SSL_CERT_KEY=${SSL_CERT_KEY}
+    ports:
+      - "80:80"
+      - "443:443"
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./traefik.yaml:/configuration/traefik.yml
+      - /etc/ssl:/etc/ssl
+      
+  frontend:
+    volumes:
+      - ./nginx.conf.template:/etc/nginx/templates/default.conf.template
+    environment:
+      - ORS_API_KEY=${ORS_API_KEY}
+      - TRAVELTIME_API_KEY=${TRAVELTIME_API_KEY}
+      - TRAVELTIME_APP_ID=${TRAVELTIME_APP_ID}
+      - MAPTILER_API_KEY=${MAPTILER_API_KEY}
+    build: ./frontend/
+    labels:
+      - "traefik.http.routers.frontend.tls=true"
+      - "traefik.http.routers.frontend.rule=PathPrefix(`/`)"
+    restart: unless-stopped
+  
+  api-proxy:
+    image: nginx:1-alpine
+    volumes:
+      - ./nginx.conf.template:/etc/nginx/templates/default.conf.template
+    environment:
+      - ORS_API_KEY=${ORS_API_KEY}
+      - TRAVELTIME_API_KEY=${TRAVELTIME_API_KEY}
+      - TRAVELTIME_APP_ID=${TRAVELTIME_APP_ID}
+      - MAPTILER_API_KEY=${MAPTILER_API_KEY}
+    restart: unless-stopped
+
+  api-proxy-dev:
+    image: nginx:1-alpine
+    profiles: ["dev"]
+    volumes:
+      - ./nginx.conf.template:/etc/nginx/templates/default.conf.template
+    environment:
+      - ORS_API_KEY=${ORS_API_KEY}
+      - TRAVELTIME_API_KEY=${TRAVELTIME_API_KEY}
+      - TRAVELTIME_APP_ID=${TRAVELTIME_APP_ID}
+      - MAPTILER_API_KEY=${MAPTILER_API_KEY}
+    labels:
+      - "traefik.http.routers.frontend.tls=true"
+      - "traefik.http.routers.frontend.rule=PathPrefix(`/`)"
+    restart: unless-stopped
+
