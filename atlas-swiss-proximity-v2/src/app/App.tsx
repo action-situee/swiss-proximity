@@ -193,11 +193,13 @@ export default function App() {
 
   const handleSelectAll = () => {
     const selectableCategories = categories.filter(category => category.id !== 'All');
-    const allSelected = selectableCategories.every(category => category.enabled);
+    const allIndividualSelected = selectableCategories.every(category => category.enabled);
+    const isAllCategoryActive = categories.some(category => category.id === 'All' && category.enabled);
+    const allSelected = allIndividualSelected || isAllCategoryActive;
 
     setCategories(prev => prev.map(category => ({
       ...category,
-      enabled: category.id === 'All' ? allSelected : !allSelected,
+      enabled: allSelected ? false : category.id !== 'All',
     })));
   };
 

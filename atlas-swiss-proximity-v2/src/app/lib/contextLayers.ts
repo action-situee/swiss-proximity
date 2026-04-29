@@ -55,15 +55,4 @@ export const contextLayerConfigs: ContextLayerConfig[] = [
     color: '#111827',
     enabled: false,
   },
-  {
-    id: 'sipv-ica-mnc-2023',
-    name: 'Canopée 2023',
-    description: 'Modèle numérique de surface de canopée, état 2023.',
-    sourceUrl: arcgisQueryUrl('https://vector.sitg.ge.ch/arcgis/rest/services/Hosted/SIPV_ICA_MNC_2023/FeatureServer', 2000),
-    catalogueUrl: 'https://sitg.ge.ch/donnees/sipv-ica-mnc-2023',
-    geometry: 'polygon',
-    color: '#16a34a',
-    enabled: false,
-    fetchStrategy: 'viewport',
-  },
 ];

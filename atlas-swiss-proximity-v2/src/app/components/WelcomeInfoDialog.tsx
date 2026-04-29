@@ -60,7 +60,7 @@ export function WelcomeInfoDialog({ open, onClose }: WelcomeInfoDialogProps) {
 
           <section className="border-t border-gray-200 pt-4 text-xs text-gray-500">
             <p>
-              Données de proximité: EPFL LASUR / ENAC IT4R. Données contextuelles: SITG. Les données OSM et open data
+              Données de proximité préparées par Marc-Edouard Schultheiss. Données contextuelles: SITG. Les données OSM et open data
               peuvent contenir des erreurs ou omissions et doivent être vérifiées pour un usage opérationnel.
             </p>
           </section>

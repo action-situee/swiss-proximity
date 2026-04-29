@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import maplibregl, { addProtocol, Popup } from 'maplibre-gl';
+import { Box, Compass, Maximize2, ZoomIn, ZoomOut } from 'lucide-react';
 import { Protocol } from 'pmtiles';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import type { ContextLayerConfig } from '../lib/contextLayers';
@@ -36,11 +37,23 @@ interface MapLibreMapProps {
   onContextLayerToggle: (id: string, enabled: boolean) => void;
 }
 
-const basemapStyles = {
-  lightbase: '/styles/lightbase.json',
-  light: '/styles/light.json',
-  dark: '/styles/dark.json',
+type BasemapStyle = 'voyager' | 'swissLight' | 'swissImagery' | 'none';
+
+const basemapStyleUrls: Record<Exclude<BasemapStyle, 'none'>, string> = {
+  voyager: 'https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json',
+  swissLight: 'https://vectortiles.geo.admin.ch/styles/ch.swisstopo.lightbasemap.vt/style.json',
+  swissImagery: 'https://vectortiles.geo.admin.ch/styles/ch.swisstopo.imagerybasemap.vt/style.json',
 };
+
+const blankStyle: maplibregl.StyleSpecification = {
+  version: 8,
+  sources: {},
+  layers: [{ id: 'background', type: 'background', paint: { 'background-color': '#FFFFFF' } }],
+};
+
+function getBasemapStyle(name: BasemapStyle): string | maplibregl.StyleSpecification {
+  return name === 'none' ? blankStyle : basemapStyleUrls[name];
+}
 
 const protocol = new Protocol();
 let isPmtilesProtocolRegistered = false;
@@ -55,6 +68,45 @@ function legendItems(mapMode: MapMode, paletteId: ProximityPaletteId): LegendIte
   return mapMode === 'demand' ? [...demandColors].reverse() : proximityColorPalettes[paletteId].colors;
 }
 
+type ScaleMark = { width: number; label: string };
+
+function computeScaleMark(currentMap: maplibregl.Map): ScaleMark | null {
+  const canvas = currentMap.getCanvas();
+  const dpr = window.devicePixelRatio || 1;
+  const cx = canvas.width / dpr / 2;
+  const cy = canvas.height / dpr / 2;
+  const range = 60;
+  const left = currentMap.unproject([cx - range, cy]);
+  const right = currentMap.unproject([cx + range, cy]);
+  const meters = left.distanceTo(right);
+  if (!meters || !isFinite(meters)) return null;
+  const magnitude = Math.pow(10, Math.floor(Math.log10(meters)));
+  const factor = meters / magnitude;
+  const nice = factor < 1.5 ? 1 : factor < 3 ? 2 : factor < 7 ? 5 : 10;
+  const niceMeters = nice * magnitude;
+  const pixelWidth = Math.round((2 * range) * niceMeters / meters);
+  const label = niceMeters >= 1000 ? `${niceMeters / 1000} km` : `${niceMeters} m`;
+  return { width: Math.min(pixelWidth, 120), label };
+}
+
+const selectStyle: React.CSSProperties = {
+  height: 32,
+  borderRadius: 0,
+  border: '1px solid #9ca3af',
+  background: '#ffffff',
+  color: '#374151',
+  fontSize: 11,
+  padding: '0 28px 0 8px',
+  cursor: 'pointer',
+  outline: 'none',
+  flexShrink: 0,
+  appearance: 'none',
+  WebkitAppearance: 'none',
+  backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%236b7280' stroke-width='1.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E\")",
+  backgroundRepeat: 'no-repeat',
+  backgroundPosition: 'right 10px center',
+};
+
 const desserteTpClasses = [
   { value: 'A - très bonne desserte', label: 'A', color: '#6d28d9' },
   { value: 'B - bonne desserte', label: 'B', color: '#2563eb' },
@@ -62,11 +114,6 @@ const desserteTpClasses = [
   { value: 'D - faible desserte', label: 'D', color: '#f97316' },
 ];
 
-const canopyLegendItems = [
-  { label: '3-8 m', color: '#bbf7d0' },
-  { label: '8-16 m', color: '#4ade80' },
-  { label: '16 m et +', color: '#166534' },
-];
 
 function contextSourceUrl(layer: ContextLayerConfig, currentMap: maplibregl.Map) {
   if (layer.fetchStrategy !== 'viewport') return layer.sourceUrl;
@@ -75,12 +122,7 @@ function contextSourceUrl(layer: ContextLayerConfig, currentMap: maplibregl.Map)
   const params = new URLSearchParams(query);
   const bounds = currentMap.getBounds();
 
-  params.set('geometry', [
-    bounds.getWest(),
-    bounds.getSouth(),
-    bounds.getEast(),
-    bounds.getNorth(),
-  ].join(','));
+  params.set('geometry', [bounds.getWest(), bounds.getSouth(), bounds.getEast(), bounds.getNorth()].join(','));
   params.set('geometryType', 'esriGeometryEnvelope');
   params.set('inSR', '4326');
   params.set('outSR', '4326');
@@ -96,26 +138,16 @@ function contextLayerVisibility(layer: ContextLayerConfig) {
 
 function contextLinePaint(layer: ContextLayerConfig) {
   if (layer.id === 'gmo-graphe-ferroviaire-region') {
-    return {
-      'line-color': '#111827',
-      'line-width': 2.8,
-      'line-opacity': 0.9,
-    };
+    return { 'line-color': '#111827', 'line-width': 2.8, 'line-opacity': 0.9 };
   }
-
-  return {
-    'line-color': layer.color,
-    'line-width': 2.6,
-    'line-opacity': 0.88,
-  };
+  return { 'line-color': layer.color, 'line-width': 2.6, 'line-opacity': 0.88 };
 }
 
 function contextFillPaint(layer: ContextLayerConfig) {
   if (layer.id === 'otc-desserte-tp') {
     return {
       'fill-color': [
-        'match',
-        ['get', 'CLASSE_DESSERTE'],
+        'match', ['get', 'CLASSE_DESSERTE'],
         ...desserteTpClasses.flatMap(item => [item.value, item.color]),
         '#e5e7eb',
       ],
@@ -123,37 +155,15 @@ function contextFillPaint(layer: ContextLayerConfig) {
     };
   }
 
-  if (layer.id === 'sipv-ica-mnc-2023') {
-    return {
-      'fill-color': [
-        'interpolate',
-        ['linear'],
-        ['coalesce', ['to-number', ['get', 'h_mean']], 0],
-        3,
-        '#bbf7d0',
-        8,
-        '#4ade80',
-        16,
-        '#16a34a',
-        26,
-        '#14532d',
-      ],
-      'fill-opacity': 0.68,
-    };
-  }
 
-  return {
-    'fill-color': layer.color,
-    'fill-opacity': 0.24,
-  };
+  return { 'fill-color': layer.color, 'fill-opacity': 0.24 };
 }
 
 function contextOutlinePaint(layer: ContextLayerConfig) {
   if (layer.id === 'otc-desserte-tp') {
     return {
       'line-color': [
-        'match',
-        ['get', 'CLASSE_DESSERTE'],
+        'match', ['get', 'CLASSE_DESSERTE'],
         ...desserteTpClasses.flatMap(item => [item.value, item.color]),
         '#9ca3af',
       ],
@@ -162,19 +172,8 @@ function contextOutlinePaint(layer: ContextLayerConfig) {
     };
   }
 
-  if (layer.id === 'sipv-ica-mnc-2023') {
-    return {
-      'line-color': '#14532d',
-      'line-width': 0.15,
-      'line-opacity': 0.25,
-    };
-  }
 
-  return {
-    'line-color': layer.color,
-    'line-width': 0.8,
-    'line-opacity': 0.6,
-  };
+  return { 'line-color': layer.color, 'line-width': 0.8, 'line-opacity': 0.6 };
 }
 
 function asGeoJson(data: any): any {
@@ -206,7 +205,6 @@ function esriGeometryToGeoJson(geometry: any) {
 
   if (geometry.rings) {
     if (geometry.rings.length === 1) return { type: 'Polygon', coordinates: geometry.rings };
-
     return {
       type: 'MultiPolygon',
       coordinates: geometry.rings.map((ring: number[][]) => [ring]),
@@ -214,6 +212,37 @@ function esriGeometryToGeoJson(geometry: any) {
   }
 
   return null;
+}
+
+function MapButton({
+  active = false,
+  children,
+  style: propStyle,
+  ...props
+}: React.ButtonHTMLAttributes<HTMLButtonElement> & { active?: boolean }) {
+  return (
+    <button
+      style={{
+        width: 32,
+        height: 32,
+        borderRadius: 0,
+        border: '1px solid #9ca3af',
+        background: active ? '#111827' : '#ffffff',
+        color: active ? '#ffffff' : '#374151',
+        transition: 'background 150ms, color 150ms',
+        cursor: 'pointer',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        flexShrink: 0,
+        padding: 0,
+        ...propStyle,
+      }}
+      {...props}
+    >
+      {children}
+    </button>
+  );
 }
 
 export function MapLibreMap({
@@ -234,10 +263,16 @@ export function MapLibreMap({
   const hasAppliedInitialStyle = useRef(false);
   const latestState = useRef({ activeCategories, activeDemandModes, mapMode, tilingType, distance, contextLayers, isProximityIndexVisible });
   const contextDataCache = useRef<Record<string, any>>({});
+  const addLayersRef = useRef<() => void>(() => {});
   const [mapLoaded, setMapLoaded] = useState(false);
-  const [styleName, setStyleName] = useState<keyof typeof basemapStyles>('lightbase');
+  const [styleName, setStyleName] = useState<BasemapStyle>('voyager');
   const [paletteId, setPaletteId] = useState<ProximityPaletteId>('contrast');
   const [isLegendOpen, setIsLegendOpen] = useState(false);
+  const [bearing, setBearing] = useState(0);
+  const [pitch, setPitch] = useState(0);
+  const [showLabels, setShowLabels] = useState(true);
+  const [scaleMark, setScaleMark] = useState<ScaleMark | null>(null);
+
   const currentTileName = useMemo(() => selectedTileName(mapMode, tilingType), [mapMode, tilingType]);
   const paletteColors = proximityColorPalettes[paletteId].colors;
   const currentExpression = useMemo(
@@ -245,10 +280,15 @@ export function MapLibreMap({
     [activeCategories, activeDemandModes, distance, mapMode, paletteColors],
   );
 
+  const isPerspective = pitch > 10;
+  const absBearing = Math.abs(bearing % 360);
+  const isNorthAligned = Math.min(absBearing, 360 - absBearing) < 1;
+
   useEffect(() => {
     latestState.current = { activeCategories, activeDemandModes, mapMode, tilingType, distance, contextLayers, isProximityIndexVisible };
   }, [activeCategories, activeDemandModes, contextLayers, distance, isProximityIndexVisible, mapMode, tilingType]);
 
+  // Map initialization
   useEffect(() => {
     if (!mapContainer.current || map.current) return;
 
@@ -256,7 +296,7 @@ export function MapLibreMap({
 
     map.current = new maplibregl.Map({
       container: mapContainer.current,
-      style: basemapStyles[styleName],
+      style: getBasemapStyle(styleName),
       bounds: mapMode === 'demand' ? boundsGeneva : boundsSwitzerland,
       fitBoundsOptions: { padding: 20 },
       maxBounds: maxBoundsSwitzerland,
@@ -264,8 +304,10 @@ export function MapLibreMap({
       attributionControl: false,
     });
 
-    map.current.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), 'top-left');
-    map.current.on('load', () => setMapLoaded(true));
+    map.current.on('load', () => {
+      setMapLoaded(true);
+      if (map.current) setScaleMark(computeScaleMark(map.current));
+    });
     map.current.on('error', (event) => {
       if (event.error?.message !== 'Failed to fetch') console.error(event.error);
     });
@@ -277,6 +319,22 @@ export function MapLibreMap({
     };
   }, []);
 
+  // Camera state tracking
+  useEffect(() => {
+    const currentMap = map.current;
+    if (!currentMap || !mapLoaded) return;
+
+    const update = () => {
+      setBearing(currentMap.getBearing());
+      setPitch(currentMap.getPitch());
+      setScaleMark(computeScaleMark(currentMap));
+    };
+
+    currentMap.on('move', update);
+    return () => { currentMap.off('move', update); };
+  }, [mapLoaded]);
+
+  // Add H3 / proximity layers
   useEffect(() => {
     const currentMap = map.current;
     if (!currentMap || !mapLoaded) return;
@@ -293,8 +351,6 @@ export function MapLibreMap({
     };
 
     const addLayers = () => {
-      if (!currentMap.isStyleLoaded()) return;
-
       const firstSymbolLayer = currentMap.getStyle().layers?.find((layer) => layer.type === 'symbol')?.id;
       const state = latestState.current;
       const tileName = selectedTileName(state.mapMode, state.tilingType);
@@ -305,10 +361,7 @@ export function MapLibreMap({
         const layerId = `layer-${sourceId}`;
 
         if (!currentMap.getSource(sourceId)) {
-          currentMap.addSource(sourceId, {
-            type: 'vector',
-            url: tile.url,
-          });
+          currentMap.addSource(sourceId, { type: 'vector', url: tile.url });
         }
 
         if (!currentMap.getLayer(layerId)) {
@@ -337,7 +390,6 @@ export function MapLibreMap({
 
             const properties = feature.properties ?? {};
             const title = properties.Agglo ? `<strong>${properties.Agglo}</strong>` : '<strong>Territoire</strong>';
-
             const state = latestState.current;
 
             if (state.mapMode === 'demand') {
@@ -379,14 +431,14 @@ export function MapLibreMap({
       moveWaterAboveData();
     };
 
+    addLayersRef.current = addLayers;
     addLayers();
     currentMap.on('style.load', addLayers);
 
-    return () => {
-      currentMap.off('style.load', addLayers);
-    };
+    return () => { currentMap.off('style.load', addLayers); };
   }, [mapLoaded, paletteId]);
 
+  // Context layers visibility quick-update
   useEffect(() => {
     const currentMap = map.current;
     if (!currentMap || !mapLoaded || !currentMap.isStyleLoaded()) return;
@@ -403,6 +455,7 @@ export function MapLibreMap({
     });
   }, [contextLayers, mapLoaded]);
 
+  // Add context layers from SITG
   useEffect(() => {
     const currentMap = map.current;
     if (!currentMap || !mapLoaded) return;
@@ -444,53 +497,29 @@ export function MapLibreMap({
         }
 
         if (!currentMap.getSource(sourceId)) {
-          currentMap.addSource(sourceId, {
-            type: 'geojson',
-            data: contextDataCache.current[layer.id],
-          });
+          currentMap.addSource(sourceId, { type: 'geojson', data: contextDataCache.current[layer.id] });
         }
 
         if (!currentMap.getLayer(layerId)) {
           if (layer.geometry === 'line') {
             currentMap.addLayer(
-              {
-                id: layerId,
-                type: 'line',
-                source: sourceId,
-                layout: { visibility: contextLayerVisibility(layer) },
-                paint: contextLinePaint(layer),
-              },
+              { id: layerId, type: 'line', source: sourceId, layout: { visibility: contextLayerVisibility(layer) }, paint: contextLinePaint(layer) },
               firstSymbolLayer,
             );
           } else {
             currentMap.addLayer(
-              {
-                id: layerId,
-                type: 'fill',
-                source: sourceId,
-                layout: { visibility: contextLayerVisibility(layer) },
-                paint: contextFillPaint(layer),
-              },
+              { id: layerId, type: 'fill', source: sourceId, layout: { visibility: contextLayerVisibility(layer) }, paint: contextFillPaint(layer) },
               firstSymbolLayer,
             );
-
             currentMap.addLayer(
-              {
-                id: outlineLayerId,
-                type: 'line',
-                source: sourceId,
-                layout: { visibility: contextLayerVisibility(layer) },
-                paint: contextOutlinePaint(layer),
-              },
+              { id: outlineLayerId, type: 'line', source: sourceId, layout: { visibility: contextLayerVisibility(layer) }, paint: contextOutlinePaint(layer) },
               firstSymbolLayer,
             );
           }
         }
 
         [layerId, outlineLayerId].forEach((id) => {
-          if (currentMap.getLayer(id)) {
-            currentMap.setLayoutProperty(id, 'visibility', contextLayerVisibility(layer));
-          }
+          if (currentMap.getLayer(id)) currentMap.setLayoutProperty(id, 'visibility', contextLayerVisibility(layer));
         });
       }
     };
@@ -499,7 +528,6 @@ export function MapLibreMap({
       const hasEnabledViewportLayer = latestState.current.contextLayers.some(
         layer => layer.enabled && layer.fetchStrategy === 'viewport',
       );
-
       if (hasEnabledViewportLayer) void addContextLayers();
     };
 
@@ -513,6 +541,7 @@ export function MapLibreMap({
     };
   }, [contextLayers, mapLoaded]);
 
+  // Update tile visibility/expression when filters change
   useEffect(() => {
     const currentMap = map.current;
     if (!currentMap || !mapLoaded) return;
@@ -524,16 +553,16 @@ export function MapLibreMap({
         currentMap.setPaintProperty(layerId, 'fill-color', currentExpression);
       }
     });
-
   }, [currentExpression, currentTileName, isProximityIndexVisible, mapLoaded]);
 
+  // Reset bounds when mapMode changes
   useEffect(() => {
     const currentMap = map.current;
     if (!currentMap || !mapLoaded) return;
-
     currentMap.fitBounds(mapMode === 'demand' ? boundsGeneva : boundsSwitzerland, { padding: 20, duration: 700 });
   }, [mapLoaded, mapMode]);
 
+  // Handle basemap style changes
   useEffect(() => {
     const currentMap = map.current;
     if (!currentMap || !mapLoaded) return;
@@ -552,68 +581,119 @@ export function MapLibreMap({
 
     currentMap.once('style.load', () => {
       currentMap.jumpTo(view);
-      setTimeout(() => {
-        const state = latestState.current;
-        const tileName = selectedTileName(state.mapMode, state.tilingType);
-        const expression = fillExpression(state.mapMode, state.activeCategories, state.activeDemandModes, state.distance, proximityColorPalettes[paletteId].colors);
-
-        listTilesParams.forEach(({ name }) => {
-          const layerId = `layer-${secureTilesName(name)}`;
-          if (currentMap.getLayer(layerId)) {
-            currentMap.setLayoutProperty(layerId, 'visibility', name === tileName && state.isProximityIndexVisible ? 'visible' : 'none');
-            currentMap.setPaintProperty(layerId, 'fill-color', expression);
-          }
-        });
-      }, 0);
+      addLayersRef.current();
     });
-    currentMap.setStyle(basemapStyles[styleName]);
+    currentMap.setStyle(getBasemapStyle(styleName));
   }, [mapLoaded, styleName]);
+
+  // Re-hide labels after style change if showLabels is off
+  useEffect(() => {
+    const currentMap = map.current;
+    if (!currentMap || !mapLoaded) return;
+
+    const applyLabels = () => {
+      if (showLabels) return;
+      currentMap.getStyle()?.layers?.forEach(layer => {
+        if (layer.type === 'symbol') {
+          try { currentMap.setLayoutProperty(layer.id, 'visibility', 'none'); } catch { /* skip */ }
+        }
+      });
+    };
+
+    currentMap.on('style.load', applyLabels);
+    return () => { currentMap.off('style.load', applyLabels); };
+  }, [showLabels, mapLoaded]);
+
+  // Keyboard shortcuts: T = labels, O = perspective, N = north
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) return;
+
+      if (e.key === 'T' || e.key === 't') {
+        const currentMap = map.current;
+        if (!currentMap) return;
+        setShowLabels(prev => {
+          const next = !prev;
+          currentMap.getStyle()?.layers?.forEach(layer => {
+            if (layer.type === 'symbol') {
+              try { currentMap.setLayoutProperty(layer.id, 'visibility', next ? 'visible' : 'none'); } catch { /* skip */ }
+            }
+          });
+          return next;
+        });
+      }
+
+      if (e.key === 'O' || e.key === 'o') {
+        const currentMap = map.current;
+        if (!currentMap) return;
+        const p = currentMap.getPitch();
+        const b = currentMap.getBearing();
+        const abs = Math.abs(b % 360);
+        const northAligned = Math.min(abs, 360 - abs) < 1;
+        if (p > 10) {
+          currentMap.flyTo({ pitch: 0, bearing: 0, duration: 500 });
+        } else {
+          currentMap.flyTo({ pitch: 55, bearing: northAligned ? -18 : b, duration: 500 });
+        }
+      }
+
+      if (e.key === 'N' || e.key === 'n') {
+        map.current?.easeTo({ bearing: 0, duration: 350 });
+      }
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
+
+  const handleResetView = () => {
+    map.current?.fitBounds(
+      mapMode === 'demand' ? boundsGeneva : boundsSwitzerland,
+      { padding: 20, duration: 700, bearing: 0, pitch: 0 },
+    );
+  };
+
+  const handleTogglePerspective = () => {
+    const currentMap = map.current;
+    if (!currentMap) return;
+    if (isPerspective) {
+      currentMap.flyTo({ pitch: 0, bearing: 0, duration: 500 });
+    } else {
+      currentMap.flyTo({ pitch: 55, bearing: isNorthAligned ? -18 : bearing, duration: 500 });
+    }
+  };
+
+  const handleToggleLabels = () => {
+    const currentMap = map.current;
+    if (!currentMap) return;
+    const next = !showLabels;
+    setShowLabels(next);
+    currentMap.getStyle()?.layers?.forEach(layer => {
+      if (layer.type === 'symbol') {
+        try { currentMap.setLayoutProperty(layer.id, 'visibility', next ? 'visible' : 'none'); } catch { /* skip */ }
+      }
+    });
+  };
+
+  const handleResetNorth = () => {
+    map.current?.easeTo({ bearing: 0, duration: 350 });
+  };
 
   const items = legendItems(mapMode, paletteId);
 
   return (
     <div className="relative h-full w-full bg-gray-100">
+      <style>{`
+        .maplibregl-ctrl-bottom-left, .maplibregl-ctrl-bottom-right { display: none !important; }
+      `}</style>
+
       <div ref={mapContainer} className="h-full w-full" />
 
-      <div className="absolute left-16 top-4 flex border border-gray-400 bg-white shadow-sm">
-        <select
-          value={styleName}
-          onChange={(event) => setStyleName(event.target.value as keyof typeof basemapStyles)}
-          className="border-r border-gray-300 bg-white px-3 py-2 text-xs text-gray-800 outline-none"
-          aria-label="Fond de carte"
-        >
-          <option value="lightbase">Lightbase</option>
-          <option value="light">Light</option>
-          <option value="dark">Dark</option>
-        </select>
-        <select
-          value={paletteId}
-          onChange={(event) => setPaletteId(event.target.value as ProximityPaletteId)}
-          className="bg-white px-3 py-2 text-xs text-gray-800 outline-none"
-          aria-label="Palette de couleur"
-        >
-          {Object.entries(proximityColorPalettes).map(([id, palette]) => (
-            <option key={id} value={id}>{palette.name}</option>
-          ))}
-        </select>
-      </div>
-
-      <div className="absolute right-4 top-4 min-w-[180px] border border-gray-400 bg-white px-3 py-2 text-xs text-gray-700 shadow-sm">
-        <div className="font-medium text-gray-900">{mapMode === 'demand' ? 'Demande' : 'Offre'}</div>
-        <div>{tilingType === 'h3' ? 'Hexagones H3' : 'Secteur statistique'}</div>
-        <div>{mapMode === 'demand' ? `${distance} m · ${year}` : `${activeCategories.length} categorie(s)`}</div>
-      </div>
-
-      <div className="absolute right-4 top-28 max-h-[calc(100%-9rem)] max-w-[270px] overflow-auto border border-gray-400 bg-white px-3 py-2 shadow-sm">
-        <button
-          onClick={() => setIsLegendOpen(value => !value)}
-          className="flex w-full items-center justify-between gap-4 text-[10px] uppercase tracking-wider text-gray-600"
-        >
-          <span>Légende</span>
-          <span>{isLegendOpen ? 'Masquer' : 'Afficher'}</span>
-        </button>
-        {isLegendOpen && (
-          <div className="mt-3 space-y-4">
+      {/* Legend panel — opens upward, anchored near the Légende button (left side) */}
+      {isLegendOpen && (
+        <div className="absolute max-w-[270px] overflow-auto border border-gray-400 bg-white px-3 py-2" style={{ bottom: 44, left: 12, maxHeight: 'calc(100% - 60px)', zIndex: 20 }}>
+          <div className="space-y-4">
             <div>
               <button
                 type="button"
@@ -665,32 +745,117 @@ export function MapLibreMap({
                       </div>
                     )}
 
-                    {layer.enabled && layer.id === 'sipv-ica-mnc-2023' && (
-                      <div className="ml-7 mt-1 space-y-1">
-                        {canopyLegendItems.map((item) => (
-                          <div key={item.label} className="flex items-center gap-1 text-[10px] text-gray-600">
-                            <span className="h-2.5 w-4 border border-gray-300" style={{ backgroundColor: item.color }} />
-                            <span>{item.label}</span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
                   </div>
                 ))}
               </div>
             </div>
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
+      {/* Loading overlay */}
       {!mapLoaded && (
         <div className="absolute inset-0 flex items-center justify-center bg-white/80 text-xs uppercase tracking-wider text-gray-500">
           Chargement de la carte
         </div>
       )}
 
-      <div className="absolute bottom-3 left-4 max-w-[calc(100%-2rem)] bg-white/85 px-2 py-1 text-[10px] text-gray-500">
-        © OpenStreetMap Contributors · 2026 Bureau Action Située · Données EPFL LASUR
+      {/* Bottom control bar */}
+      <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 40, display: 'flex', alignItems: 'center', padding: '0 12px', gap: 4, background: 'rgba(255,255,255,0.5)', borderTop: '1px solid rgba(209,213,219,0.5)', zIndex: 10 }}>
+        <MapButton onClick={() => map.current?.zoomIn()} title="Zoom avant">
+          <ZoomIn size={16} />
+        </MapButton>
+
+        <MapButton onClick={() => map.current?.zoomOut()} title="Zoom arrière">
+          <ZoomOut size={16} />
+        </MapButton>
+
+        <MapButton onClick={handleResetView} title="Recentrer">
+          <Maximize2 size={16} />
+        </MapButton>
+
+        <MapButton
+          onClick={handleTogglePerspective}
+          title="Perspective / orientation (O)"
+          active={isPerspective}
+          aria-pressed={isPerspective}
+        >
+          <Box size={16} />
+        </MapButton>
+
+        <MapButton
+          onClick={handleToggleLabels}
+          title="Afficher les noms (T)"
+          active={!showLabels}
+          aria-pressed={!showLabels}
+        >
+          <span style={{ fontFamily: 'Arial', fontSize: 13, fontWeight: 700, lineHeight: 1 }}>T</span>
+        </MapButton>
+
+        <MapButton
+          onClick={handleResetNorth}
+          title="Remettre le nord en haut (N)"
+          active={!isNorthAligned}
+          aria-pressed={!isNorthAligned}
+        >
+          <Compass
+            size={16}
+            style={{ transform: `rotate(${-bearing}deg)`, transition: 'transform 100ms linear' }}
+          />
+        </MapButton>
+
+        <div style={{ width: 1, height: 20, background: '#d1d5db', margin: '0 4px', flexShrink: 0 }} />
+
+        <select
+          value={styleName}
+          onChange={(e) => setStyleName(e.target.value as BasemapStyle)}
+          title="Fond de carte"
+          style={selectStyle}
+        >
+          <option value="voyager">Voyager</option>
+          <option value="swissLight">Swiss Light</option>
+          <option value="swissImagery">Swiss Imagerie</option>
+          <option value="none">Sans fond</option>
+        </select>
+
+        <select
+          value={paletteId}
+          onChange={(e) => setPaletteId(e.target.value as ProximityPaletteId)}
+          title="Palette de couleur"
+          aria-label="Palette de couleur"
+          style={selectStyle}
+        >
+          {Object.entries(proximityColorPalettes).map(([id, palette]) => (
+            <option key={id} value={id}>{palette.name}</option>
+          ))}
+        </select>
+
+        <button
+          onClick={() => setIsLegendOpen(v => !v)}
+          title="Légende"
+          style={{
+            height: 32, padding: '0 10px', borderRadius: 0,
+            border: '1px solid #9ca3af',
+            background: isLegendOpen ? '#111827' : '#ffffff',
+            color: isLegendOpen ? '#ffffff' : '#374151',
+            fontSize: 10, letterSpacing: '0.05em', textTransform: 'uppercase',
+            cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0,
+          }}
+        >
+          Légende
+        </button>
+
+        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
+          {scaleMark && (
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+              <div style={{ width: scaleMark.width, height: 3, borderLeft: '1px solid #9ca3af', borderRight: '1px solid #9ca3af', borderBottom: '1px solid #9ca3af' }} />
+              <span style={{ fontSize: 9, color: '#6b7280', fontFamily: 'Arial', marginTop: 1 }}>{scaleMark.label}</span>
+            </div>
+          )}
+          <span style={{ fontSize: 9, color: '#9ca3af', fontFamily: 'Arial', whiteSpace: 'nowrap' }}>
+            © OpenStreetMap · BAS 2026
+          </span>
+        </div>
       </div>
     </div>
   );

@@ -16,9 +16,9 @@ interface TabNavigationProps {
 
 export function TabNavigation({ activeTab, onTabChange, dataMode, onDataModeChange, timeMode, onTimeModeChange, onInfoOpen }: TabNavigationProps) {
   const tabs = [
-    { id: 'map' as TabType, label: 'Carte' },
+    { id: 'map' as TabType, label: 'Courtes distances' },
     { id: 'analysis' as TabType, label: 'Analyse', icon: BarChart3 },
-    { id: 'stations' as TabType, label: 'Arrêts', icon: MapPin },
+    { id: 'stations' as TabType, label: 'Arrêts du Léman Express', icon: MapPin },
   ];
 
   return (
