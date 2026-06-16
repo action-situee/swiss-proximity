@@ -1,0 +1,163 @@
+{
+  "station": {
+    "station_id": "sitg-agglo-gares-30",
+    "name": "Chêne-Bourg",
+    "type": "Léman Express",
+    "source": "AGGLO_GARES",
+    "lines": "LEX",
+    "lon": 6.197647616007232,
+    "lat": 46.19658272163181
+  },
+  "radius_m": 1000,
+  "generated_at": "2026-04-30T08:20:39.507292+00:00",
+  "themes": {
+    "amenities": {
+      "label": "Aménités",
+      "feature_count": 353,
+      "layers": {
+        "CarePlace": 1,
+        "Lighting": 269,
+        "MajorRetail": 9,
+        "OSMDrinkingWater": 6,
+        "OSMToilets": 2,
+        "ParkRide": 3,
+        "PostOffice": 3,
+        "PrimarySchool": 9,
+        "SportFacility": 51
+      },
+      "rings": {
+        "0-250m": 22,
+        "250-500m": 106,
+        "500-750m": 63,
+        "750-1000m": 162
+      },
+      "sources": {
+        "OSM": 8,
+        "SITG": 345
+      },
+      "osm_drinking_water": 6,
+      "osm_toilets": 2
+    },
+    "safety": {
+      "label": "Sécurité vélos/piétons",
+      "feature_count": 1146,
+      "layers": {
+        "Accident": 223,
+        "BikeFacilities": 206,
+        "Lighting": 269,
+        "OSMCrossingsSignals": 321,
+        "OSMStreetLighting": 38,
+        "PedestrianNetworks": 70,
+        "TrafficCalming": 19
+      },
+      "rings": {
+        "0-250m": 89,
+        "250-500m": 299,
+        "500-750m": 362,
+        "750-1000m": 384,
+        "intersecte 1000m": 12
+      },
+      "sources": {
+        "OSM": 359,
+        "SITG": 787
+      },
+      "accidents_total": 223,
+      "accidents_severe_or_fatal": 82,
+      "accidents_pedestrians": 95,
+      "accidents_bikes": 141,
+      "osm_lamps": 38,
+      "osm_crossings_signals": 321
+    },
+    "greenPublic": {
+      "label": "Espaces verts & publics",
+      "feature_count": 8209,
+      "layers": {
+        "NaturalHabitats": 7131,
+        "OSMDrinkingWater": 6,
+        "OSMTrees": 965,
+        "PublicSpaces": 56,
+        "SportFacility": 51
+      },
+      "rings": {
+        "0-250m": 704,
+        "250-500m": 1820,
+        "500-750m": 2542,
+        "750-1000m": 3027,
+        "intersecte 1000m": 116
+      },
+      "sources": {
+        "OSM": 971,
+        "SITG": 7238
+      },
+      "open_space_area_m2": 2751340.4767963896,
+      "benches": 0,
+      "bins": 0,
+      "osm_trees": 965,
+      "osm_drinking_water": 6,
+      "benches_per_ha": 0.0
+    },
+    "activeMobility": {
+      "label": "Mobilité douce",
+      "feature_count": 1134,
+      "layers": {
+        "Accident": 223,
+        "BikeFacilities": 206,
+        "Lighting": 269,
+        "OSMBicycleParking": 23,
+        "OSMCrossingsSignals": 321,
+        "ParkRide": 3,
+        "PedestrianNetworks": 70,
+        "TrafficCalming": 19
+      },
+      "rings": {
+        "0-250m": 104,
+        "250-500m": 302,
+        "500-750m": 353,
+        "750-1000m": 363,
+        "intersecte 1000m": 12
+      },
+      "sources": {
+        "OSM": 344,
+        "SITG": 790
+      },
+      "accidents_total": 223,
+      "accidents_severe_or_fatal": 82,
+      "accidents_pedestrians": 95,
+      "accidents_bikes": 141,
+      "osm_lamps": 0,
+      "osm_crossings_signals": 321,
+      "active_network_length_m": 24186.05516218162,
+      "osm_bicycle_parking": 23,
+      "osm_cycle_repair": 0
+    },
+    "urbanism": {
+      "label": "Urbanisme & courtes distances",
+      "feature_count": 3703,
+      "layers": {
+        "Buildings": 3420,
+        "LandUseZones": 151,
+        "ParkRide": 3,
+        "PlanGuideProjects": 2,
+        "PlanGuideUrbanization": 26,
+        "PopulationJobs": 101
+      },
+      "rings": {
+        "0-250m": 339,
+        "250-500m": 881,
+        "500-750m": 1159,
+        "750-1000m": 1250,
+        "intersecte 1000m": 74
+      },
+      "sources": {
+        "SITG": 3703
+      },
+      "buildings": 3420,
+      "built_area_m2": 464295.3827288052,
+      "built_density_m2_ha": 1477.9,
+      "avg_building_height_m": 8.6,
+      "population": 25351.0,
+      "employment": 8577.0,
+      "jobs_per_resident": 0.34
+    }
+  }
+}

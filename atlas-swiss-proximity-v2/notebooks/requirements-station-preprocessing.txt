@@ -1,0 +1,11 @@
+requests
+pandas
+geopandas
+shapely
+pyproj
+folium
+tqdm
+matplotlib
+jupyterlab
+notebook
+ipykernel

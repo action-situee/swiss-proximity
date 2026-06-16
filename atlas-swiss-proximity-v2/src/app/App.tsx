@@ -17,9 +17,10 @@ import {
 } from './lib/proximityData';
 import {
   fetchRealTransportStations,
-  fetchStationProximityData,
+  fetchStationProximityDataForStation,
   getInitialStation,
   type Station,
+  type StationAnalysisThemeId,
   type StationProximityData,
 } from './lib/stationData';
 
@@ -88,6 +89,7 @@ export default function App() {
   const [transportStations, setTransportStations] = useState<Station[]>([getInitialStation()]);
   const [stationProximityData, setStationProximityData] = useState<StationProximityData | null>(null);
   const [isStationProximityLoading, setIsStationProximityLoading] = useState(false);
+  const [stationAnalysisTheme, setStationAnalysisTheme] = useState<StationAnalysisThemeId>('amenities');
   const [contextLayers, setContextLayers] = useState<ContextLayerConfig[]>(loadContextLayers);
   const [isInfoOpen, setIsInfoOpen] = useState(() => sessionStorage.getItem('welcomeSeen') !== 'true');
 
@@ -108,8 +110,11 @@ export default function App() {
         if (!isMounted) return;
         setTransportStations(stations);
         setSelectedStation(current => {
-          if (current) return stations.find(station => station.id === current.id) ?? current;
-          return stations.find(station => station.name === 'Genève') ?? stations[0] ?? null;
+          if (current?.source === 'AGGLO_GARES' || current?.source === 'TPG_ARRETS') return stations.find(station => station.id === current.id) ?? current;
+          return stations.find(station => station.name === 'Genève-Cornavin')
+            ?? stations.find(station => station.name === 'Genève')
+            ?? stations[0]
+            ?? null;
         });
       })
       .catch((error) => {
@@ -130,7 +135,7 @@ export default function App() {
     let isMounted = true;
     setIsStationProximityLoading(true);
 
-    fetchStationProximityData(selectedStation.id)
+    fetchStationProximityDataForStation(selectedStation, stationAnalysisTheme)
       .then((data) => {
         if (isMounted) setStationProximityData(data);
       })
@@ -145,7 +150,7 @@ export default function App() {
     return () => {
       isMounted = false;
     };
-  }, [selectedStation]);
+  }, [selectedStation, stationAnalysisTheme]);
 
   const activeCategories = useMemo(
     () => categories.filter(category => category.enabled && category.weight > 0 && category.diversity > 0),
@@ -289,6 +294,7 @@ export default function App() {
                   timeMode={timeMode}
                   proximityData={stationProximityData}
                   isProximityLoading={isStationProximityLoading}
+                  activeAnalysisTheme={stationAnalysisTheme}
                   onStationSelect={setSelectedStation}
                 />
               </div>
@@ -300,6 +306,8 @@ export default function App() {
               timeMode={timeMode}
               proximityData={stationProximityData}
               isProximityLoading={isStationProximityLoading}
+              activeAnalysisTheme={stationAnalysisTheme}
+              onAnalysisThemeChange={setStationAnalysisTheme}
               onStationSelect={setSelectedStation}
             />
           </main>

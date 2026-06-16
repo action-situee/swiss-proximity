@@ -3,11 +3,16 @@ import maplibregl, { Popup } from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import type { ProximityCategory } from '../lib/proximityData';
 import {
+  accessibilityRings,
   createCircle,
   fetchRegionalRailGraph,
   railGraphFallbackGeoJson,
+  sitgThematicLayers,
+  stationAnalysisThemes,
+  sitgEquipmentLayers,
   stationProximityGeoJson,
   type Station,
+  type StationAnalysisThemeId,
   type StationProximityData,
   type TimeMode,
 } from '../lib/stationData';
@@ -19,6 +24,7 @@ interface TransportStationsMapProps {
   timeMode: TimeMode;
   proximityData: StationProximityData | null;
   isProximityLoading: boolean;
+  activeAnalysisTheme: StationAnalysisThemeId;
   onStationSelect: (station: Station) => void;
 }
 
@@ -39,50 +45,34 @@ function createStationGeoJson(stations: Station[]) {
   };
 }
 
-const equipmentIconColors: Record<string, string> = {
-  Education: '#7c3aed',
-  Culture: '#c026d3',
-  Care: '#db2777',
-  Outdoor: '#16a34a',
-  Sport: '#ea580c',
-  Catering: '#dc2626',
-  Provision: '#ca8a04',
-  Shopping: '#0891b2',
-  Public: '#475569',
-  Transport: '#2563eb',
-  UrbanFurniture: '#64748b',
-  Parking: '#334155',
-  Safety: '#b91c1c',
-  Tourism: '#8b5cf6',
-  Services: '#0f766e',
-  Other: '#6b7280',
-};
+const equipmentIconColors: Record<string, string> = Object.fromEntries(
+  sitgEquipmentLayers.map(layer => [layer.id, layer.color]),
+);
 
-const equipmentCategoryLabels: Record<string, string> = {
-  Education: 'Écoles et formation',
-  Culture: 'Culture',
-  Care: 'Santé et soins',
-  Outdoor: 'Espaces publics',
-  Sport: 'Sport',
-  Catering: 'Restaurants et cafés',
-  Provision: 'Commerces alimentaires',
-  Shopping: 'Magasins',
-  Public: 'Services publics',
-  Transport: 'Transport',
-  UrbanFurniture: 'Mobilier urbain',
-  Parking: 'Stationnement',
-  Safety: 'Sécurité',
-  Tourism: 'Tourisme',
-  Services: 'Services',
-  Other: 'Autres équipements',
-};
+const equipmentCategoryLabels: Record<string, string> = Object.fromEntries(
+  [...sitgEquipmentLayers, ...sitgThematicLayers].map(layer => [layer.id, layer.label]),
+);
 
 const equipmentIconIds = Object.fromEntries(
   Object.keys(equipmentIconColors).map(category => [category, `equipment-icon-${category.toLowerCase()}`]),
 ) as Record<string, string>;
 
+const stationIconIds = {
+  selected: 'transport-station-square-selected',
+  leman: 'transport-station-square-leman',
+  tram: 'transport-station-square-tram',
+} as const;
+
 const defaultVisibleEquipment = Object.fromEntries(
   Object.keys(equipmentIconColors).map(category => [category, true]),
+) as Record<string, boolean>;
+
+const thematicLayerColors: Record<string, string> = Object.fromEntries(
+  sitgThematicLayers.map(layer => [layer.id, layer.color]),
+);
+
+const defaultVisibleThematicLayers = Object.fromEntries(
+  sitgThematicLayers.map(layer => [layer.id, true]),
 ) as Record<string, boolean>;
 
 function equipmentLayerFilter(visibleEquipment: Record<string, boolean>) {
@@ -95,6 +85,20 @@ function equipmentLayerFilter(visibleEquipment: Record<string, boolean>) {
   ];
 }
 
+function thematicLayerFilter(
+  visibleThematicLayers: Record<string, boolean>,
+  geometryTypes: string[],
+) {
+  const visibleCategories = Object.keys(thematicLayerColors).filter(category => visibleThematicLayers[category] !== false);
+
+  return [
+    'all',
+    ['==', ['get', 'kind'], 'thematic'],
+    ['match', ['geometry-type'], geometryTypes, true, false],
+    ['match', ['get', 'category_id'], visibleCategories, true, false],
+  ];
+}
+
 function registerEquipmentIcons(currentMap: maplibregl.Map) {
   Object.entries(equipmentIconColors).forEach(([category, color]) => {
     const imageId = equipmentIconIds[category];
@@ -103,7 +107,68 @@ function registerEquipmentIcons(currentMap: maplibregl.Map) {
   });
 }
 
+function registerStationIcons(currentMap: maplibregl.Map) {
+  const icons = [
+    [stationIconIds.selected, '#dc2626'],
+    [stationIconIds.leman, '#2563eb'],
+    [stationIconIds.tram, '#111827'],
+  ] as const;
+
+  icons.forEach(([imageId, color]) => {
+    if (currentMap.hasImage(imageId)) return;
+    currentMap.addImage(imageId, drawStationSquareIcon(color), { pixelRatio: 2 });
+  });
+}
+
+function stationIconImageExpression(selectedStationId?: string) {
+  return [
+    'case',
+    ['==', ['get', 'id'], selectedStationId ?? ''],
+    stationIconIds.selected,
+    ['==', ['get', 'type'], 'Léman Express'],
+    stationIconIds.leman,
+    stationIconIds.tram,
+  ];
+}
+
+function stationIconSizeExpression(selectedStationId?: string) {
+  return ['case', ['==', ['get', 'id'], selectedStationId ?? ''], 0.88, 0.68];
+}
+
+function drawStationSquareIcon(color: string) {
+  const size = 48;
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('Canvas 2D indisponible');
+
+  ctx.clearRect(0, 0, size, size);
+  ctx.fillStyle = color;
+  ctx.strokeStyle = '#ffffff';
+  ctx.lineWidth = 5;
+  ctx.beginPath();
+  ctx.rect(10, 10, 28, 28);
+  ctx.fill();
+  ctx.stroke();
+
+  return ctx.getImageData(0, 0, size, size);
+}
+
+function equipmentIconKind(category: string) {
+  if (category === 'PrimarySchool' || category === 'College') return 'Education';
+  if (category === 'CarePlace') return 'Care';
+  if (category === 'SportFacility') return 'Sport';
+  if (category === 'MajorRetail') return 'Shopping';
+  if (category === 'PostOffice') return 'Services';
+  if (category === 'ParkRide') return 'Parking';
+  if (category === 'Lighting') return 'Safety';
+
+  return category;
+}
+
 function drawEquipmentIcon(category: string, color: string) {
+  const iconKind = equipmentIconKind(category);
   const size = 56;
   const canvas = document.createElement('canvas');
   canvas.width = size;
@@ -122,7 +187,7 @@ function drawEquipmentIcon(category: string, color: string) {
   ctx.fillStyle = '#ffffff';
   ctx.lineWidth = 4;
 
-  if (category === 'Education') {
+  if (iconKind === 'Education') {
     ctx.beginPath();
     ctx.moveTo(15, 27);
     ctx.lineTo(28, 18);
@@ -134,7 +199,7 @@ function drawEquipmentIcon(category: string, color: string) {
     ctx.moveTo(28, 39);
     ctx.lineTo(28, 32);
     ctx.stroke();
-  } else if (category === 'Culture') {
+  } else if (iconKind === 'Culture') {
     ctx.beginPath();
     ctx.moveTo(16, 20);
     ctx.lineTo(40, 20);
@@ -147,10 +212,10 @@ function drawEquipmentIcon(category: string, color: string) {
     ctx.moveTo(35, 25);
     ctx.lineTo(35, 39);
     ctx.stroke();
-  } else if (category === 'Care') {
+  } else if (iconKind === 'Care') {
     ctx.fillRect(25, 15, 6, 26);
     ctx.fillRect(15, 25, 26, 6);
-  } else if (category === 'Outdoor') {
+  } else if (iconKind === 'Outdoor') {
     ctx.beginPath();
     ctx.moveTo(28, 39);
     ctx.lineTo(28, 27);
@@ -160,7 +225,7 @@ function drawEquipmentIcon(category: string, color: string) {
     ctx.moveTo(22, 27);
     ctx.lineTo(34, 27);
     ctx.stroke();
-  } else if (category === 'Sport') {
+  } else if (iconKind === 'Sport') {
     ctx.beginPath();
     ctx.arc(28, 28, 13, 0, Math.PI * 2);
     ctx.moveTo(15, 28);
@@ -170,7 +235,7 @@ function drawEquipmentIcon(category: string, color: string) {
     ctx.moveTo(28, 15);
     ctx.bezierCurveTo(34, 22, 34, 34, 28, 41);
     ctx.stroke();
-  } else if (category === 'Catering') {
+  } else if (iconKind === 'Catering') {
     ctx.beginPath();
     ctx.moveTo(21, 16);
     ctx.lineTo(21, 40);
@@ -183,7 +248,7 @@ function drawEquipmentIcon(category: string, color: string) {
     ctx.moveTo(34, 17);
     ctx.quadraticCurveTo(42, 22, 34, 29);
     ctx.stroke();
-  } else if (category === 'Provision') {
+  } else if (iconKind === 'Provision') {
     ctx.beginPath();
     ctx.moveTo(16, 26);
     ctx.lineTo(40, 26);
@@ -193,13 +258,13 @@ function drawEquipmentIcon(category: string, color: string) {
     ctx.moveTo(22, 26);
     ctx.quadraticCurveTo(28, 14, 34, 26);
     ctx.stroke();
-  } else if (category === 'Shopping') {
+  } else if (iconKind === 'Shopping') {
     ctx.beginPath();
     ctx.rect(18, 24, 20, 17);
     ctx.moveTo(23, 24);
     ctx.quadraticCurveTo(28, 14, 33, 24);
     ctx.stroke();
-  } else if (category === 'Public') {
+  } else if (iconKind === 'Public') {
     ctx.beginPath();
     ctx.moveTo(16, 24);
     ctx.lineTo(28, 17);
@@ -213,7 +278,7 @@ function drawEquipmentIcon(category: string, color: string) {
     ctx.moveTo(35, 25);
     ctx.lineTo(35, 37);
     ctx.stroke();
-  } else if (category === 'Transport') {
+  } else if (iconKind === 'Transport') {
     ctx.beginPath();
     ctx.rect(17, 17, 22, 21);
     ctx.moveTo(21, 38);
@@ -227,7 +292,7 @@ function drawEquipmentIcon(category: string, color: string) {
     ctx.arc(22, 33, 2, 0, Math.PI * 2);
     ctx.arc(34, 33, 2, 0, Math.PI * 2);
     ctx.fill();
-  } else if (category === 'UrbanFurniture') {
+  } else if (iconKind === 'UrbanFurniture') {
     ctx.beginPath();
     ctx.moveTo(17, 31);
     ctx.lineTo(39, 31);
@@ -238,12 +303,12 @@ function drawEquipmentIcon(category: string, color: string) {
     ctx.moveTo(20, 38);
     ctx.lineTo(36, 38);
     ctx.stroke();
-  } else if (category === 'Parking') {
+  } else if (iconKind === 'Parking') {
     ctx.font = 'bold 28px Arial';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText('P', 28, 29);
-  } else if (category === 'Safety') {
+  } else if (iconKind === 'Safety') {
     ctx.beginPath();
     ctx.moveTo(28, 16);
     ctx.lineTo(38, 21);
@@ -258,12 +323,12 @@ function drawEquipmentIcon(category: string, color: string) {
     ctx.moveTo(22, 28);
     ctx.lineTo(34, 28);
     ctx.stroke();
-  } else if (category === 'Tourism') {
+  } else if (iconKind === 'Tourism') {
     ctx.font = 'bold 27px Arial';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText('i', 28, 30);
-  } else if (category === 'Services') {
+  } else if (iconKind === 'Services') {
     ctx.beginPath();
     ctx.rect(17, 23, 22, 16);
     ctx.moveTo(24, 23);
@@ -289,6 +354,7 @@ export function TransportStationsMap({
   timeMode,
   proximityData,
   isProximityLoading,
+  activeAnalysisTheme,
   onStationSelect,
 }: TransportStationsMapProps) {
   const mapContainer = useRef<HTMLDivElement>(null);
@@ -300,14 +366,28 @@ export function TransportStationsMap({
   const [mapLoaded, setMapLoaded] = useState(false);
   const [railGraphData, setRailGraphData] = useState<any>(railGraphFallbackGeoJson);
   const [visibleEquipment, setVisibleEquipment] = useState<Record<string, boolean>>(defaultVisibleEquipment);
+  const [visibleThematicLayers, setVisibleThematicLayers] = useState<Record<string, boolean>>(defaultVisibleThematicLayers);
+  const [visibleRings, setVisibleRings] = useState<Record<string, boolean>>({
+    250: true,
+    500: true,
+    750: true,
+    1000: true,
+  });
+  const [showRailLines, setShowRailLines] = useState(true);
+  const [showStations, setShowStations] = useState(true);
   const [showAccidentDensity, setShowAccidentDensity] = useState(true);
   const [showAccidentPoints, setShowAccidentPoints] = useState(false);
+  const [accidentUserFilter, setAccidentUserFilter] = useState<'all' | 'pedestrian' | 'bike'>('all');
+  const [accidentSeverityFilter, setAccidentSeverityFilter] = useState<'all' | 'severe'>('all');
+  const [minAccidentYear, setMinAccidentYear] = useState(2010);
+  const [showLayerLegend, setShowLayerLegend] = useState(true);
 
   const poiData = useMemo(
-    () => stationProximityGeoJson(proximityData, [], timeMode),
-    [proximityData, timeMode],
+    () => filterStationPois(stationProximityGeoJson(proximityData, [], timeMode), accidentUserFilter, accidentSeverityFilter, minAccidentYear),
+    [accidentSeverityFilter, accidentUserFilter, minAccidentYear, proximityData, timeMode],
   );
   const stationData = useMemo(() => createStationGeoJson(stations), [stations]);
+  const activeTheme = stationAnalysisThemes.find(theme => theme.id === activeAnalysisTheme) ?? stationAnalysisThemes[0];
 
   useEffect(() => {
     latestStations.current = stations;
@@ -329,6 +409,17 @@ export function TransportStationsMap({
       isMounted = false;
     };
   }, []);
+
+  useEffect(() => {
+    setVisibleEquipment(Object.fromEntries(
+      sitgEquipmentLayers.map(layer => [layer.id, activeTheme.equipmentLayerIds.includes(layer.id)]),
+    ) as Record<string, boolean>);
+    setVisibleThematicLayers(Object.fromEntries(
+      sitgThematicLayers.map(layer => [layer.id, activeTheme.thematicLayerIds.includes(layer.id)]),
+    ) as Record<string, boolean>);
+    setShowAccidentDensity(activeTheme.showAccidentDensity);
+    setShowAccidentPoints(activeTheme.showAccidentPoints);
+  }, [activeTheme]);
 
   useEffect(() => {
     if (!mapContainer.current || map.current) return;
@@ -369,22 +460,25 @@ export function TransportStationsMap({
         paint: {
           'line-color': [
             'case',
-            ['==', ['get', 'TYPE_VOIE'], 'Tramway'],
-            '#111827',
-            '#2563eb',
+            ['==', ['get', 'TYPE_VOIE'], 'tram'],
+            '#f39200',
+            '#eb0000',
           ],
           'line-width': [
             'case',
-            ['==', ['get', 'TYPE_VOIE'], 'Tramway'],
-            1.7,
+            ['==', ['get', 'TYPE_VOIE'], 'tram'],
+            2.8,
             3.2,
           ],
           'line-opacity': timeMode === 'night' ? 0.42 : 0.68,
         },
+        layout: { visibility: showRailLines ? 'visible' : 'none' },
       });
     }
 
     if (!currentMap.getSource('transport-stations')) {
+      registerStationIcons(currentMap);
+
       currentMap.addSource('transport-stations', {
         type: 'geojson',
         data: stationData as GeoJSON.FeatureCollection,
@@ -392,20 +486,14 @@ export function TransportStationsMap({
 
       currentMap.addLayer({
         id: 'transport-stations',
-        type: 'circle',
+        type: 'symbol',
         source: 'transport-stations',
-        paint: {
-          'circle-radius': ['case', ['==', ['get', 'id'], selectedStation?.id ?? ''], 10, 6],
-          'circle-color': [
-            'case',
-            ['==', ['get', 'id'], selectedStation?.id ?? ''],
-            '#dc2626',
-            ['==', ['get', 'type'], 'Léman Express'],
-            '#2563eb',
-            '#111827',
-          ],
-          'circle-stroke-width': 2,
-          'circle-stroke-color': '#ffffff',
+        layout: {
+          visibility: showStations ? 'visible' : 'none',
+          'icon-image': stationIconImageExpression(selectedStation?.id),
+          'icon-size': stationIconSizeExpression(selectedStation?.id),
+          'icon-allow-overlap': true,
+          'icon-ignore-placement': true,
         },
       });
 
@@ -414,6 +502,7 @@ export function TransportStationsMap({
         type: 'symbol',
         source: 'transport-stations',
         layout: {
+          visibility: showStations ? 'visible' : 'none',
           'text-field': ['get', 'name'],
           'text-size': 11,
           'text-offset': [0, 1.2],
@@ -455,7 +544,7 @@ export function TransportStationsMap({
         onStationSelect(station);
       });
     }
-  }, [mapLoaded, onStationSelect, railGraphData, selectedStation?.id, stationData, stations, timeMode]);
+  }, [mapLoaded, onStationSelect, railGraphData, selectedStation?.id, showRailLines, showStations, stationData, stations, timeMode]);
 
   useEffect(() => {
     const currentMap = map.current;
@@ -499,35 +588,55 @@ export function TransportStationsMap({
     if (!currentMap || !mapLoaded) return;
 
     if (currentMap.getLayer('transport-stations')) {
-      currentMap.setPaintProperty('transport-stations', 'circle-radius', ['case', ['==', ['get', 'id'], selectedStation?.id ?? ''], 10, 6]);
-      currentMap.setPaintProperty('transport-stations', 'circle-color', [
-        'case',
-        ['==', ['get', 'id'], selectedStation?.id ?? ''],
-        '#dc2626',
-        ['==', ['get', 'type'], 'Léman Express'],
-        '#2563eb',
-        '#111827',
-      ]);
+      currentMap.setLayoutProperty('transport-stations', 'icon-image', stationIconImageExpression(selectedStation?.id));
+      currentMap.setLayoutProperty('transport-stations', 'icon-size', stationIconSizeExpression(selectedStation?.id));
     }
 
     if (currentMap.getLayer('transit-lines')) {
       currentMap.setPaintProperty('transit-lines', 'line-opacity', timeMode === 'night' ? 0.42 : 0.68);
+      currentMap.setLayoutProperty('transit-lines', 'visibility', showRailLines ? 'visible' : 'none');
     }
-  }, [mapLoaded, selectedStation?.id, timeMode]);
+
+    ['transport-stations', 'transport-station-labels'].forEach((layerId) => {
+      if (currentMap.getLayer(layerId)) currentMap.setLayoutProperty(layerId, 'visibility', showStations ? 'visible' : 'none');
+    });
+  }, [mapLoaded, selectedStation?.id, showRailLines, showStations, timeMode]);
+
+  useEffect(() => {
+    const currentMap = map.current;
+    if (!currentMap || !mapLoaded) return;
+
+    accessibilityRings.forEach((ring) => {
+      const visibility = visibleRings[ring.id] === false ? 'none' : 'visible';
+      [`access-ring-${ring.id}`, `access-ring-${ring.id}-outline`].forEach((layerId) => {
+        if (currentMap.getLayer(layerId)) currentMap.setLayoutProperty(layerId, 'visibility', visibility);
+      });
+    });
+  }, [mapLoaded, visibleRings]);
+
+  useEffect(() => {
+    const currentMap = map.current;
+    if (!currentMap || !mapLoaded || !selectedStation) return;
+
+    accessibilityRings.forEach((ring) => {
+      const source = currentMap.getSource(`access-ring-${ring.id}`) as maplibregl.GeoJSONSource | undefined;
+      if (source) source.setData(createCircle(selectedStation.coordinates, ring.to) as GeoJSON.Feature);
+    });
+  }, [mapLoaded, selectedStation]);
 
   useEffect(() => {
     const currentMap = map.current;
     if (!currentMap || !mapLoaded || !selectedStation) return;
 
     [
-      'influence-800-outline',
-      'influence-300-outline',
-      'influence-800',
-      'influence-300',
       'station-equipment',
+      'station-thematic-polygons',
+      'station-thematic-lines',
+      'station-thematic-points',
       'station-accidents-density',
       'station-accident-points',
       'station-pois',
+      ...accessibilityRings.flatMap(ring => [`access-ring-${ring.id}-outline`, `access-ring-${ring.id}`]),
     ].forEach((id) => {
       if (currentMap.getLayer(id)) currentMap.removeLayer(id);
       if (currentMap.getSource(id)) currentMap.removeSource(id);
@@ -535,22 +644,21 @@ export function TransportStationsMap({
 
     registerEquipmentIcons(currentMap);
 
-    [
-      { id: 'influence-800', meters: 800, color: '#2563eb', opacity: timeMode === 'night' ? 0.05 : 0.08 },
-      { id: 'influence-300', meters: 300, color: '#dc2626', opacity: timeMode === 'night' ? 0.08 : 0.12 },
-    ].forEach(({ id, meters, color, opacity }) => {
+    accessibilityRings.forEach((ring) => {
+      const id = `access-ring-${ring.id}`;
       currentMap.addSource(id, {
         type: 'geojson',
-        data: createCircle(selectedStation.coordinates, meters) as GeoJSON.Feature,
+        data: createCircle(selectedStation.coordinates, ring.to) as GeoJSON.Feature,
       });
 
       currentMap.addLayer({
         id,
         type: 'fill',
         source: id,
+        layout: { visibility: visibleRings[ring.id] === false ? 'none' : 'visible' },
         paint: {
-          'fill-color': color,
-          'fill-opacity': opacity,
+          'fill-color': ring.fill,
+          'fill-opacity': timeMode === 'night' ? ring.opacity * 0.62 : ring.opacity,
         },
       }, 'transport-stations');
 
@@ -558,10 +666,10 @@ export function TransportStationsMap({
         id: `${id}-outline`,
         type: 'line',
         source: id,
+        layout: { visibility: visibleRings[ring.id] === false ? 'none' : 'visible' },
         paint: {
-          'line-color': color,
+          'line-color': ring.line,
           'line-width': 2,
-          'line-dasharray': [4, 4],
         },
       }, 'transport-stations');
     });
@@ -570,6 +678,60 @@ export function TransportStationsMap({
       type: 'geojson',
       data: poiData as GeoJSON.FeatureCollection,
     });
+
+    currentMap.addLayer({
+      id: 'station-thematic-polygons',
+      type: 'fill',
+      source: 'station-pois',
+      filter: thematicLayerFilter(visibleThematicLayers, ['Polygon', 'MultiPolygon']) as any,
+      paint: {
+        'fill-color': ['get', 'color'],
+        'fill-opacity': timeMode === 'night' ? 0.2 : 0.28,
+        'fill-outline-color': ['get', 'color'],
+      },
+    }, 'transport-stations');
+
+    currentMap.addLayer({
+      id: 'station-thematic-lines',
+      type: 'line',
+      source: 'station-pois',
+      filter: thematicLayerFilter(visibleThematicLayers, ['LineString', 'MultiLineString']) as any,
+      paint: {
+        'line-color': ['get', 'color'],
+        'line-width': [
+          'interpolate',
+          ['linear'],
+          ['zoom'],
+          11,
+          1.2,
+          15,
+          3.2,
+        ],
+        'line-opacity': timeMode === 'night' ? 0.58 : 0.84,
+      },
+    }, 'transport-stations');
+
+    currentMap.addLayer({
+      id: 'station-thematic-points',
+      type: 'circle',
+      source: 'station-pois',
+      filter: thematicLayerFilter(visibleThematicLayers, ['Point', 'MultiPoint']) as any,
+      paint: {
+        'circle-radius': [
+          'interpolate',
+          ['linear'],
+          ['zoom'],
+          11,
+          3,
+          15,
+          5.5,
+        ],
+        'circle-color': ['get', 'color'],
+        'circle-opacity': timeMode === 'night' ? 0.62 : 0.9,
+        'circle-stroke-width': 1,
+        'circle-stroke-color': '#ffffff',
+      },
+    }, 'transport-stations');
 
     currentMap.addLayer({
       id: 'station-accidents-density',
@@ -660,7 +822,7 @@ export function TransportStationsMap({
           'match',
           ['get', 'category_id'],
           ...Object.entries(equipmentIconIds).flatMap(([category, iconId]) => [category, iconId]),
-          equipmentIconIds.Other,
+          equipmentIconIds.PrimarySchool,
         ],
         'icon-size': [
           'interpolate',
@@ -682,7 +844,7 @@ export function TransportStationsMap({
     if (!hasProximityHandlers.current) {
       hasProximityHandlers.current = true;
 
-      ['station-equipment', 'station-accident-points'].forEach((layerId) => {
+      ['station-equipment', 'station-accident-points', 'station-thematic-polygons', 'station-thematic-lines', 'station-thematic-points'].forEach((layerId) => {
         currentMap.on('mouseenter', layerId, () => {
           currentMap.getCanvas().style.cursor = 'pointer';
         });
@@ -713,6 +875,18 @@ export function TransportStationsMap({
       currentMap.setFilter('station-equipment', equipmentLayerFilter(visibleEquipment) as any);
     }
 
+    if (currentMap.getLayer('station-thematic-polygons')) {
+      currentMap.setFilter('station-thematic-polygons', thematicLayerFilter(visibleThematicLayers, ['Polygon', 'MultiPolygon']) as any);
+    }
+
+    if (currentMap.getLayer('station-thematic-lines')) {
+      currentMap.setFilter('station-thematic-lines', thematicLayerFilter(visibleThematicLayers, ['LineString', 'MultiLineString']) as any);
+    }
+
+    if (currentMap.getLayer('station-thematic-points')) {
+      currentMap.setFilter('station-thematic-points', thematicLayerFilter(visibleThematicLayers, ['Point', 'MultiPoint']) as any);
+    }
+
     if (currentMap.getLayer('station-accidents-density')) {
       currentMap.setLayoutProperty('station-accidents-density', 'visibility', showAccidentDensity ? 'visible' : 'none');
     }
@@ -720,37 +894,110 @@ export function TransportStationsMap({
     if (currentMap.getLayer('station-accident-points')) {
       currentMap.setLayoutProperty('station-accident-points', 'visibility', showAccidentPoints ? 'visible' : 'none');
     }
-  }, [mapLoaded, showAccidentDensity, showAccidentPoints, visibleEquipment]);
+  }, [mapLoaded, showAccidentDensity, showAccidentPoints, visibleEquipment, visibleThematicLayers]);
 
   return (
     <div className="relative h-full w-full bg-gray-100">
       <div ref={mapContainer} className="h-full w-full" />
       <div className="absolute left-4 top-4 border border-gray-400 bg-white px-3 py-2 text-xs text-gray-700">
-        <div className="font-medium text-gray-900">Arrêts TP</div>
-        <div>{timeMode === 'day' ? 'Jour' : timeMode === 'night' ? 'Nuit' : '24h'} · {isProximityLoading ? 'chargement équipements' : 'équipements par arrêt'}</div>
+        <div className="font-medium text-gray-900">Arrêts Léman Express et tram</div>
+        <div>{stations.length} arrêts SITG · {isProximityLoading ? 'chargement SITG' : 'analyse 1000 m'}</div>
       </div>
-      <div className="absolute bottom-4 left-4 max-w-[290px] border border-gray-400 bg-white px-3 py-2 text-xs text-gray-700 shadow-sm">
-        <div className="mb-2 font-medium text-gray-900">Équipements et accidents</div>
+      {!showLayerLegend && (
         <button
           type="button"
-          onClick={() => setShowAccidentDensity(value => !value)}
-          aria-pressed={showAccidentDensity}
-          className={`mb-1.5 flex w-full items-center gap-2 text-left transition-opacity ${showAccidentDensity ? 'opacity-100' : 'opacity-35'}`}
+          onClick={() => setShowLayerLegend(true)}
+          className="absolute bottom-4 left-4 border border-gray-400 bg-white px-3 py-2 text-xs font-medium text-gray-800 shadow-sm hover:bg-gray-50"
         >
-          <span className="h-3 w-10 rounded-full bg-gradient-to-r from-[#fee2e2] via-[#f87171] to-[#7f1d1d]" />
-          <span>Densité d'accidents</span>
+          Afficher les couches
         </button>
-        <button
-          type="button"
-          onClick={() => setShowAccidentPoints(value => !value)}
-          aria-pressed={showAccidentPoints}
-          className={`mb-2 flex w-full items-center gap-2 text-left transition-opacity ${showAccidentPoints ? 'opacity-100' : 'opacity-35'}`}
-        >
-          <span className="h-3 w-3 rounded-full border border-white bg-red-700 shadow-sm" />
-          <span>Accidents en points</span>
-        </button>
+      )}
+      {showLayerLegend && (
+        <div className="absolute bottom-4 left-4 max-h-[calc(100%-110px)] w-[330px] overflow-auto border border-gray-400 bg-white px-3 py-2 text-xs text-gray-700 shadow-sm">
+          <div className="mb-2 flex items-center justify-between gap-3">
+            <div className="font-medium text-gray-900">Couches d'accessibilité</div>
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] uppercase tracking-wider text-gray-500">SITG</span>
+              <button
+                type="button"
+                onClick={() => setShowLayerLegend(false)}
+                className="border border-gray-300 px-1.5 py-0.5 text-[10px] text-gray-600 hover:bg-gray-50"
+              >
+                Masquer
+              </button>
+            </div>
+          </div>
+        <div className="mb-3 border border-gray-200 bg-gray-50 px-2 py-1.5">
+          <div className="text-[10px] uppercase tracking-wider text-gray-500">Preset actif</div>
+          <div className="font-medium text-gray-900">{activeTheme.label}</div>
+        </div>
+
+        <div className="mb-3 grid grid-cols-2 gap-1.5">
+          <LayerToggle active={showRailLines} label="Train LEX / tram TPG" swatch="#eb0000" onClick={() => setShowRailLines(value => !value)} />
+          <LayerToggle active={showStations} label="Arrêts et gares" swatch="#2563eb" onClick={() => setShowStations(value => !value)} />
+        </div>
+
+        <div className="mb-3">
+          <div className="mb-1.5 text-[10px] uppercase tracking-wider text-gray-500">Anneaux de marche</div>
+          <div className="grid grid-cols-2 gap-1.5">
+            {accessibilityRings.map(ring => (
+              <button
+                key={ring.id}
+                type="button"
+                onClick={() => setVisibleRings(prev => ({ ...prev, [ring.id]: prev[ring.id] === false }))}
+                aria-pressed={visibleRings[ring.id] !== false}
+                className={`flex items-center gap-2 border border-gray-200 px-2 py-1 text-left transition-opacity ${visibleRings[ring.id] !== false ? 'opacity-100' : 'opacity-35'}`}
+              >
+                <span className="h-3 w-5 shrink-0 border" style={{ backgroundColor: ring.fill, borderColor: ring.line }} />
+                <span className="min-w-0 truncate">{ring.title} · {ring.description}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="mb-3">
+          <div className="mb-1.5 text-[10px] uppercase tracking-wider text-gray-500">Sécurité OTC_ACCIDENTS</div>
+          <div className="mb-2 grid grid-cols-2 gap-1.5">
+            <LayerToggle active={showAccidentDensity} label="Densité" swatch="#dc2626" onClick={() => setShowAccidentDensity(value => !value)} gradient />
+            <LayerToggle active={showAccidentPoints} label="Points" swatch="#7f1d1d" onClick={() => setShowAccidentPoints(value => !value)} />
+          </div>
+          <div className="grid grid-cols-3 border border-gray-300">
+            {(['all', 'pedestrian', 'bike'] as const).map(value => (
+              <button
+                key={value}
+                type="button"
+                onClick={() => setAccidentUserFilter(value)}
+                className={`px-2 py-1 ${accidentUserFilter === value ? 'bg-gray-900 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
+              >
+                {value === 'all' ? 'Tous' : value === 'pedestrian' ? 'Piétons' : 'Vélos'}
+              </button>
+            ))}
+          </div>
+          <div className="mt-1.5 grid grid-cols-[1fr_auto] items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setAccidentSeverityFilter(value => value === 'all' ? 'severe' : 'all')}
+              className={`border border-gray-300 px-2 py-1 text-left ${accidentSeverityFilter === 'severe' ? 'bg-red-700 text-white' : 'bg-white text-gray-700'}`}
+            >
+              Graves ou mortels
+            </button>
+            <label className="flex items-center gap-1">
+              <span>Depuis</span>
+              <input
+                type="number"
+                min={2010}
+                max={2024}
+                value={minAccidentYear}
+                onChange={(event) => setMinAccidentYear(Number(event.target.value))}
+                className="w-16 border border-gray-300 px-1 py-1"
+              />
+            </label>
+          </div>
+        </div>
+
+        <div className="mb-1.5 text-[10px] uppercase tracking-wider text-gray-500">Équipements publics accessibles</div>
         <div className="grid grid-cols-2 gap-x-3 gap-y-1">
-          {Object.entries(equipmentCategoryLabels).map(([id, label]) => {
+          {sitgEquipmentLayers.map(({ id, label, color }) => {
             const isVisible = visibleEquipment[id] !== false;
 
             return (
@@ -761,13 +1008,36 @@ export function TransportStationsMap({
                 aria-pressed={isVisible}
                 className={`flex min-w-0 items-center gap-1.5 text-left transition-opacity ${isVisible ? 'opacity-100' : 'opacity-35'}`}
               >
-                <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: equipmentIconColors[id] }} />
+                <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: color }} />
+                <span className="truncate">{label}</span>
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="mb-1.5 mt-3 text-[10px] uppercase tracking-wider text-gray-500">Couches thématiques</div>
+        <div className="grid grid-cols-2 gap-x-3 gap-y-1">
+          {sitgThematicLayers
+            .filter(layer => activeTheme.thematicLayerIds.includes(layer.id))
+            .map(({ id, label, color }) => {
+            const isVisible = visibleThematicLayers[id] !== false;
+
+            return (
+              <button
+                key={id}
+                type="button"
+                onClick={() => setVisibleThematicLayers(prev => ({ ...prev, [id]: prev[id] === false }))}
+                aria-pressed={isVisible}
+                className={`flex min-w-0 items-center gap-1.5 text-left transition-opacity ${isVisible ? 'opacity-100' : 'opacity-35'}`}
+              >
+                <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: color }} />
                 <span className="truncate">{label}</span>
               </button>
             );
           })}
         </div>
       </div>
+      )}
       {!mapLoaded && (
         <div className="absolute inset-0 flex items-center justify-center bg-white/80 text-xs uppercase tracking-wider text-gray-500">
           Chargement des arrêts
@@ -775,6 +1045,46 @@ export function TransportStationsMap({
       )}
     </div>
   );
+}
+
+function LayerToggle({ active, label, swatch, gradient, onClick }: { active: boolean; label: string; swatch: string; gradient?: boolean; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      className={`flex min-w-0 items-center gap-2 border border-gray-200 px-2 py-1 text-left transition-opacity ${active ? 'opacity-100' : 'opacity-35'}`}
+    >
+      <span
+        className={`h-3 w-5 shrink-0 ${gradient ? 'bg-gradient-to-r from-[#fee2e2] via-[#f87171] to-[#7f1d1d]' : ''}`}
+        style={gradient ? undefined : { backgroundColor: swatch }}
+      />
+      <span className="truncate">{label}</span>
+    </button>
+  );
+}
+
+function filterStationPois(
+  collection: { type: string; features: any[] },
+  userFilter: 'all' | 'pedestrian' | 'bike',
+  severityFilter: 'all' | 'severe',
+  minYear: number,
+) {
+  return {
+    ...collection,
+    features: collection.features.filter((feature) => {
+      if (feature.properties?.kind !== 'accident') return true;
+      const year = Number(feature.properties.year ?? 0);
+      if (Number.isFinite(minYear) && year > 0 && year < minYear) return false;
+      if (userFilter === 'pedestrian' && Number(feature.properties.pedestrians ?? 0) <= 0) return false;
+      if (userFilter === 'bike') {
+        const bikeCount = Number(feature.properties.bicycles ?? 0) + Number(feature.properties.eBikes25 ?? 0) + Number(feature.properties.eBikes45 ?? 0);
+        if (bikeCount <= 0) return false;
+      }
+      if (severityFilter === 'severe' && Number(feature.properties.killed ?? 0) <= 0 && Number(feature.properties.injured_serious ?? 0) <= 0) return false;
+      return true;
+    }),
+  };
 }
 
 function proximityPopupHtml(properties: Record<string, any>) {
@@ -788,6 +1098,7 @@ function proximityPopupHtml(properties: Record<string, any>) {
     return [
       `<strong>${escapeHtml(properties.name ?? 'Accident')}</strong>`,
       properties.year ? `<span>${escapeHtml(String(properties.year))}${properties.ring_label ? ` · ${escapeHtml(properties.ring_label)}` : ''}</span>` : null,
+      properties.light_conditions ? `<span>${escapeHtml(properties.light_conditions)}</span>` : null,
       properties.consequences ? `<span>${escapeHtml(properties.consequences)}</span>` : null,
       injuries ? `<span>${escapeHtml(injuries)}</span>` : null,
     ].filter(Boolean).join('<br/>');
@@ -800,6 +1111,8 @@ function proximityPopupHtml(properties: Record<string, any>) {
   return [
     `<strong>${escapeHtml(properties.name ?? properties.category ?? 'Équipement')}</strong>`,
     `<span>${escapeHtml(categoryLabel)}${escapeHtml(osmLabel)}${properties.ring_label ? ` · ${escapeHtml(properties.ring_label)}` : ''}</span>`,
+    properties.detail ? `<span>${escapeHtml(properties.detail)}</span>` : null,
+    properties.address ? `<span>${escapeHtml(properties.address)}</span>` : null,
     properties.opening_hours ? `<span>${escapeHtml(properties.opening_hours)}</span>` : null,
   ].filter(Boolean).join('<br/>');
 }
