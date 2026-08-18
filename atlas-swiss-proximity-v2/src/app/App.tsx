@@ -18,11 +18,16 @@ import {
 import {
   fetchRealTransportStations,
   fetchStationProximityDataForStation,
+  fetchStationProximityManifest,
   getInitialStation,
   type Station,
   type StationAnalysisThemeId,
+  type StationManifestEntry,
   type StationProximityData,
 } from './lib/stationData';
+
+const PUBLISHED_SECTIONS_ENABLED: boolean = false;
+const PUBLISHED_CONTEXT_LAYERS: ContextLayerConfig[] = [];
 
 function loadSessionValue<T>(key: string, fallback: T): T {
   try {
@@ -90,6 +95,7 @@ export default function App() {
   const [stationProximityData, setStationProximityData] = useState<StationProximityData | null>(null);
   const [isStationProximityLoading, setIsStationProximityLoading] = useState(false);
   const [stationAnalysisTheme, setStationAnalysisTheme] = useState<StationAnalysisThemeId>('amenities');
+  const [manifestEntries, setManifestEntries] = useState<StationManifestEntry[]>([]);
   const [contextLayers, setContextLayers] = useState<ContextLayerConfig[]>(loadContextLayers);
   const [isInfoOpen, setIsInfoOpen] = useState(() => sessionStorage.getItem('welcomeSeen') !== 'true');
 
@@ -103,6 +109,16 @@ export default function App() {
   useEffect(() => saveSessionValue('contextLayers', contextLayers), [contextLayers]);
 
   useEffect(() => {
+    if (!PUBLISHED_SECTIONS_ENABLED) return;
+
+    fetchStationProximityManifest()
+      .then(manifest => setManifestEntries(Object.values(manifest.stations)))
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (!PUBLISHED_SECTIONS_ENABLED) return;
+
     let isMounted = true;
 
     fetchRealTransportStations()
@@ -127,6 +143,12 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    if (!PUBLISHED_SECTIONS_ENABLED) {
+      setStationProximityData(null);
+      setIsStationProximityLoading(false);
+      return;
+    }
+
     if (!selectedStation) {
       setStationProximityData(null);
       return;
@@ -157,6 +179,7 @@ export default function App() {
     [categories],
   );
   const activeDemandModes = useMemo(() => demandModes.filter(mode => mode.enabled), [demandModes]);
+  const publishedContextLayers = PUBLISHED_SECTIONS_ENABLED ? contextLayers : PUBLISHED_CONTEXT_LAYERS;
 
   const handleCategoryChange = (updatedCategory: ProximityCategory) => {
     setCategories(prev => {
@@ -209,6 +232,7 @@ export default function App() {
   };
 
   const handleContextLayerToggle = (id: string, enabled: boolean) => {
+    if (!PUBLISHED_SECTIONS_ENABLED) return;
     setContextLayers(prev => prev.map(layer => layer.id === id ? { ...layer, enabled } : layer));
   };
 
@@ -216,12 +240,16 @@ export default function App() {
     <div className="flex size-full flex-col bg-white">
       <TabNavigation
         activeTab={activeTab}
-        onTabChange={setActiveTab}
+        onTabChange={(tab) => {
+          if (PUBLISHED_SECTIONS_ENABLED || tab === 'map') setActiveTab(tab);
+        }}
         dataMode={dataMode}
         onDataModeChange={setDataMode}
         timeMode={timeMode}
         onTimeModeChange={setTimeMode}
         onInfoOpen={() => setIsInfoOpen(true)}
+        showUnpublishedSections={PUBLISHED_SECTIONS_ENABLED}
+        showWorkInProgressTabs={!PUBLISHED_SECTIONS_ENABLED}
       />
 
       <div className="flex flex-1 overflow-hidden">
@@ -244,10 +272,12 @@ export default function App() {
               onYearChange={setYear}
               onReset={handleReset}
               onSelectAll={handleSelectAll}
-              contextLayers={contextLayers}
+              contextLayers={publishedContextLayers}
               onContextLayerToggle={handleContextLayerToggle}
+              showContextTab={PUBLISHED_SECTIONS_ENABLED}
+              showDisabledContextTab={!PUBLISHED_SECTIONS_ENABLED}
             />
-            <main className="flex-1 p-4">
+            <main className="min-w-0 flex-1 overflow-hidden p-2">
               <div className="h-full border border-gray-400 bg-white">
                 <MapLibreMap
                   activeCategories={activeCategories}
@@ -257,7 +287,7 @@ export default function App() {
                   tilingType={tilingType}
                   distance={distance}
                   year={year}
-                  contextLayers={contextLayers}
+                  contextLayers={publishedContextLayers}
                   onProximityIndexVisibleChange={setIsProximityIndexVisible}
                   onContextLayerToggle={handleContextLayerToggle}
                 />
@@ -266,7 +296,7 @@ export default function App() {
           </>
         )}
 
-        {activeTab === 'analysis' && (
+        {PUBLISHED_SECTIONS_ENABLED && activeTab === 'analysis' && (
           <main className="flex-1 p-4">
             <div className="h-full border border-gray-400 bg-white">
               <AnalysisPanel
@@ -278,12 +308,14 @@ export default function App() {
                 year={year}
                 dataMode={dataMode}
                 timeMode={timeMode}
+                manifestEntries={manifestEntries}
+                selectedStation={selectedStation}
               />
             </div>
           </main>
         )}
 
-        {activeTab === 'stations' && (
+        {PUBLISHED_SECTIONS_ENABLED && activeTab === 'stations' && (
           <main className="flex flex-1 overflow-hidden">
             <div className="flex-1 p-4">
               <div className="h-full border border-gray-400 bg-white">
@@ -307,6 +339,7 @@ export default function App() {
               proximityData={stationProximityData}
               isProximityLoading={isStationProximityLoading}
               activeAnalysisTheme={stationAnalysisTheme}
+              manifestEntries={manifestEntries}
               onAnalysisThemeChange={setStationAnalysisTheme}
               onStationSelect={setSelectedStation}
             />

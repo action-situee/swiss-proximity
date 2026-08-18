@@ -1103,6 +1103,51 @@ function isSevereAccident(feature: StationProximityFeature) {
   return Number(feature.properties.killed ?? 0) > 0 || Number(feature.properties.injured_serious ?? 0) > 0;
 }
 
+export function stationEquipmentPercentile(
+  stationId: string,
+  equipmentCountFallback: number,
+  manifestEntries: StationManifestEntry[],
+): number {
+  if (manifestEntries.length < 10) return -1;
+  const manifestEntry = manifestEntries.find(e => e.id === stationId);
+  const count = manifestEntry?.equipment_count ?? equipmentCountFallback;
+  const below = manifestEntries.filter(e => e.equipment_count < count).length;
+  return Math.round((below / manifestEntries.length) * 100);
+}
+
+export function stationGradient500m(proximityData: StationProximityData | null): number {
+  if (!proximityData) return -1;
+  const equipment = proximityData.features.filter(f => f.properties.kind === 'equipment');
+  const total = equipment.length;
+  if (total === 0) return -1;
+  const in500 = equipment.filter(f => f.properties.ring_label === '0-250m' || f.properties.ring_label === '250-500m').length;
+  return Math.round((in500 / total) * 100);
+}
+
+export function stationEssentialCoverage(proximityData: StationProximityData | null): { present: number; outOf: number } {
+  if (!proximityData) return { present: 0, outOf: 0 };
+  const presentIds = new Set(
+    proximityData.features
+      .filter(f => f.properties.kind === 'equipment')
+      .map(f => f.properties.category_id ?? ''),
+  );
+  const sitgEssential = ['PrimarySchool', 'College', 'CarePlace', 'MajorRetail', 'SportFacility', 'PostOffice'];
+  const manifestEssential = ['Education', 'Care', 'Shopping', 'Sport', 'Public', 'Provision'];
+  const isSitg = sitgEssential.some(id => presentIds.has(id));
+  const essentialSet = isSitg ? sitgEssential : manifestEssential;
+  return { present: essentialSet.filter(id => presentIds.has(id)).length, outOf: essentialSet.length };
+}
+
+// Taux de référence réseau pour la gravité des accidents usagers vulnérables (issu de l'EDA)
+const NETWORK_SEVERITY_RATE = 20;
+
+export function stationSafetyRate(proximityData: StationProximityData | null): { rate: number; networkRate: number; total: number } {
+  const accidents = proximityData?.features.filter(f => f.properties.kind === 'accident') ?? [];
+  const severe = accidents.filter(isSevereAccident).length;
+  const total = accidents.length;
+  return { rate: total > 0 ? Math.round((severe / total) * 100) : 0, networkRate: NETWORK_SEVERITY_RATE, total };
+}
+
 function average(values: number[]) {
   if (values.length === 0) return 0;
   return values.reduce((sum, value) => sum + value, 0) / values.length;

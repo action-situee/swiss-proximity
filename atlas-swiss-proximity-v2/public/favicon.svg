@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title">
+  <title id="title">Action Située</title>
+  <rect width="512" height="512" fill="#ffffff"/>
+  <rect x="150" y="54" width="300" height="300" fill="#d18e7c" opacity="0.6"/>
+  <rect x="62" y="154" width="300" height="300" fill="#f4b840" opacity="0.6"/>
+  <rect x="104" y="104" width="300" height="300" fill="#67a578" opacity="0.72"/>
+  <text x="256" y="226" fill="#ffffff" font-family="Arial, sans-serif" font-size="84" font-weight="700" text-anchor="middle">action</text>
+  <text x="256" y="314" fill="#ffffff" font-family="Arial, sans-serif" font-size="84" font-weight="700" text-anchor="middle">située</text>
+</svg>

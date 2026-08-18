@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import maplibregl, { addProtocol, Popup } from 'maplibre-gl';
-import { Box, Compass, Maximize2, ZoomIn, ZoomOut } from 'lucide-react';
+import { Box, Compass, Maximize2, Mountain, ZoomIn, ZoomOut } from 'lucide-react';
 import { Protocol } from 'pmtiles';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import type { ContextLayerConfig } from '../lib/contextLayers';
@@ -214,6 +214,33 @@ function esriGeometryToGeoJson(geometry: any) {
   return null;
 }
 
+function applyTerrain(currentMap: maplibregl.Map, enabled: boolean) {
+  try {
+    if (enabled) {
+      if (!currentMap.getSource('terrain-dem')) {
+        currentMap.addSource('terrain-dem', {
+          type: 'raster-dem',
+          url: 'https://demotiles.maplibre.org/terrain-tiles/tiles.json',
+          tileSize: 256,
+        });
+      }
+      currentMap.setTerrain({ source: 'terrain-dem', exaggeration: 1.5 });
+      currentMap.setSky({
+        'sky-color': '#1565c0',
+        'horizon-color': '#c5d8e8',
+        'fog-color': '#e4eff8',
+        'fog-ground-blend': 0.5,
+        'atmosphere-blend': 0.85,
+      });
+    } else {
+      currentMap.setTerrain(null);
+      currentMap.setSky({ 'atmosphere-blend': 0 });
+    }
+  } catch (err) {
+    console.warn('3D terrain:', err);
+  }
+}
+
 function MapButton({
   active = false,
   children,
@@ -272,6 +299,8 @@ export function MapLibreMap({
   const [pitch, setPitch] = useState(0);
   const [showLabels, setShowLabels] = useState(true);
   const [scaleMark, setScaleMark] = useState<ScaleMark | null>(null);
+  const [show3d, setShow3d] = useState(false);
+  const show3dRef = useRef(false);
 
   const currentTileName = useMemo(() => selectedTileName(mapMode, tilingType), [mapMode, tilingType]);
   const paletteColors = proximityColorPalettes[paletteId].colors;
@@ -333,6 +362,21 @@ export function MapLibreMap({
     currentMap.on('move', update);
     return () => { currentMap.off('move', update); };
   }, [mapLoaded]);
+
+  // Sync show3d to ref for use in style.load callbacks
+  useEffect(() => { show3dRef.current = show3d; }, [show3d]);
+
+  // Apply / remove terrain when toggle changes
+  useEffect(() => {
+    const currentMap = map.current;
+    if (!currentMap || !mapLoaded) return;
+    applyTerrain(currentMap, show3d);
+    if (show3d && pitch <= 10) {
+      currentMap.flyTo({ pitch: 55, bearing: isNorthAligned ? -18 : bearing, duration: 600 });
+    } else if (!show3d) {
+      currentMap.flyTo({ pitch: 0, bearing: 0, duration: 500 });
+    }
+  }, [show3d, mapLoaded]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Add H3 / proximity layers
   useEffect(() => {
@@ -582,6 +626,7 @@ export function MapLibreMap({
     currentMap.once('style.load', () => {
       currentMap.jumpTo(view);
       addLayersRef.current();
+      if (show3dRef.current) applyTerrain(currentMap, true);
     });
     currentMap.setStyle(getBasemapStyle(styleName));
   }, [mapLoaded, styleName]);
@@ -678,6 +723,10 @@ export function MapLibreMap({
 
   const handleResetNorth = () => {
     map.current?.easeTo({ bearing: 0, duration: 350 });
+  };
+
+  const handleToggle3d = () => {
+    setShow3d(prev => !prev);
   };
 
   const items = legendItems(mapMode, paletteId);
@@ -781,6 +830,15 @@ export function MapLibreMap({
           aria-pressed={isPerspective}
         >
           <Box size={16} />
+        </MapButton>
+
+        <MapButton
+          onClick={handleToggle3d}
+          title="Relief 3D"
+          active={show3d}
+          aria-pressed={show3d}
+        >
+          <Mountain size={16} />
         </MapButton>
 
         <MapButton

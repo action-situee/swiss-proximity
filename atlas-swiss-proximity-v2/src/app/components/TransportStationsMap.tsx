@@ -380,7 +380,9 @@ export function TransportStationsMap({
   const [accidentUserFilter, setAccidentUserFilter] = useState<'all' | 'pedestrian' | 'bike'>('all');
   const [accidentSeverityFilter, setAccidentSeverityFilter] = useState<'all' | 'severe'>('all');
   const [minAccidentYear, setMinAccidentYear] = useState(2010);
-  const [showLayerLegend, setShowLayerLegend] = useState(true);
+  const [showLayerLegend, setShowLayerLegend] = useState(false);
+  const [show3d, setShow3d] = useState(false);
+  const show3dRef = useRef(false);
 
   const poiData = useMemo(
     () => filterStationPois(stationProximityGeoJson(proximityData, [], timeMode), accidentUserFilter, accidentSeverityFilter, minAccidentYear),
@@ -896,6 +898,39 @@ export function TransportStationsMap({
     }
   }, [mapLoaded, showAccidentDensity, showAccidentPoints, visibleEquipment, visibleThematicLayers]);
 
+  useEffect(() => { show3dRef.current = show3d; }, [show3d]);
+
+  useEffect(() => {
+    const currentMap = map.current;
+    if (!currentMap || !mapLoaded) return;
+    try {
+      if (show3d) {
+        if (!currentMap.getSource('terrain-dem')) {
+          currentMap.addSource('terrain-dem', {
+            type: 'raster-dem',
+            url: 'https://demotiles.maplibre.org/terrain-tiles/tiles.json',
+            tileSize: 256,
+          });
+        }
+        currentMap.setTerrain({ source: 'terrain-dem', exaggeration: 1.5 });
+        currentMap.setSky({
+          'sky-color': '#1565c0',
+          'horizon-color': '#c5d8e8',
+          'fog-color': '#e4eff8',
+          'fog-ground-blend': 0.5,
+          'atmosphere-blend': 0.85,
+        });
+        currentMap.flyTo({ pitch: 55, bearing: -20, duration: 600 });
+      } else {
+        currentMap.setTerrain(null);
+        currentMap.setSky({ 'atmosphere-blend': 0 });
+        currentMap.flyTo({ pitch: 0, bearing: 0, duration: 500 });
+      }
+    } catch (err) {
+      console.warn('3D terrain:', err);
+    }
+  }, [show3d, mapLoaded]);
+
   return (
     <div className="relative h-full w-full bg-gray-100">
       <div ref={mapContainer} className="h-full w-full" />
@@ -903,140 +938,150 @@ export function TransportStationsMap({
         <div className="font-medium text-gray-900">Arrêts Léman Express et tram</div>
         <div>{stations.length} arrêts SITG · {isProximityLoading ? 'chargement SITG' : 'analyse 1000 m'}</div>
       </div>
-      {!showLayerLegend && (
+      <div className="absolute bottom-4 left-4 flex gap-1.5">
+        {!showLayerLegend && (
+          <button
+            type="button"
+            onClick={() => setShowLayerLegend(true)}
+            className="border border-gray-300 bg-white px-3 py-1.5 text-[10px] uppercase tracking-wider text-gray-700 shadow-sm hover:bg-gray-50"
+          >
+            Couches
+          </button>
+        )}
         <button
           type="button"
-          onClick={() => setShowLayerLegend(true)}
-          className="absolute bottom-4 left-4 border border-gray-400 bg-white px-3 py-2 text-xs font-medium text-gray-800 shadow-sm hover:bg-gray-50"
+          onClick={() => setShow3d(v => !v)}
+          aria-pressed={show3d}
+          title="Relief 3D"
+          className={`border px-3 py-1.5 text-[10px] uppercase tracking-wider shadow-sm transition-colors ${show3d ? 'border-gray-900 bg-gray-900 text-white' : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50'}`}
         >
-          Afficher les couches
+          3D
         </button>
-      )}
+      </div>
       {showLayerLegend && (
-        <div className="absolute bottom-4 left-4 max-h-[calc(100%-110px)] w-[330px] overflow-auto border border-gray-400 bg-white px-3 py-2 text-xs text-gray-700 shadow-sm">
-          <div className="mb-2 flex items-center justify-between gap-3">
-            <div className="font-medium text-gray-900">Couches d'accessibilité</div>
-            <div className="flex items-center gap-2">
-              <span className="text-[10px] uppercase tracking-wider text-gray-500">SITG</span>
-              <button
-                type="button"
-                onClick={() => setShowLayerLegend(false)}
-                className="border border-gray-300 px-1.5 py-0.5 text-[10px] text-gray-600 hover:bg-gray-50"
-              >
-                Masquer
-              </button>
-            </div>
-          </div>
-        <div className="mb-3 border border-gray-200 bg-gray-50 px-2 py-1.5">
-          <div className="text-[10px] uppercase tracking-wider text-gray-500">Preset actif</div>
-          <div className="font-medium text-gray-900">{activeTheme.label}</div>
-        </div>
-
-        <div className="mb-3 grid grid-cols-2 gap-1.5">
-          <LayerToggle active={showRailLines} label="Train LEX / tram TPG" swatch="#eb0000" onClick={() => setShowRailLines(value => !value)} />
-          <LayerToggle active={showStations} label="Arrêts et gares" swatch="#2563eb" onClick={() => setShowStations(value => !value)} />
-        </div>
-
-        <div className="mb-3">
-          <div className="mb-1.5 text-[10px] uppercase tracking-wider text-gray-500">Anneaux de marche</div>
-          <div className="grid grid-cols-2 gap-1.5">
-            {accessibilityRings.map(ring => (
-              <button
-                key={ring.id}
-                type="button"
-                onClick={() => setVisibleRings(prev => ({ ...prev, [ring.id]: prev[ring.id] === false }))}
-                aria-pressed={visibleRings[ring.id] !== false}
-                className={`flex items-center gap-2 border border-gray-200 px-2 py-1 text-left transition-opacity ${visibleRings[ring.id] !== false ? 'opacity-100' : 'opacity-35'}`}
-              >
-                <span className="h-3 w-5 shrink-0 border" style={{ backgroundColor: ring.fill, borderColor: ring.line }} />
-                <span className="min-w-0 truncate">{ring.title} · {ring.description}</span>
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div className="mb-3">
-          <div className="mb-1.5 text-[10px] uppercase tracking-wider text-gray-500">Sécurité OTC_ACCIDENTS</div>
-          <div className="mb-2 grid grid-cols-2 gap-1.5">
-            <LayerToggle active={showAccidentDensity} label="Densité" swatch="#dc2626" onClick={() => setShowAccidentDensity(value => !value)} gradient />
-            <LayerToggle active={showAccidentPoints} label="Points" swatch="#7f1d1d" onClick={() => setShowAccidentPoints(value => !value)} />
-          </div>
-          <div className="grid grid-cols-3 border border-gray-300">
-            {(['all', 'pedestrian', 'bike'] as const).map(value => (
-              <button
-                key={value}
-                type="button"
-                onClick={() => setAccidentUserFilter(value)}
-                className={`px-2 py-1 ${accidentUserFilter === value ? 'bg-gray-900 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
-              >
-                {value === 'all' ? 'Tous' : value === 'pedestrian' ? 'Piétons' : 'Vélos'}
-              </button>
-            ))}
-          </div>
-          <div className="mt-1.5 grid grid-cols-[1fr_auto] items-center gap-2">
+        <div className="absolute bottom-4 left-4 max-h-[calc(100%-100px)] w-[260px] overflow-auto border border-gray-300 bg-white text-xs text-gray-700 shadow-sm">
+          <div className="flex items-center justify-between border-b border-gray-200 px-3 py-2">
+            <span className="font-medium text-gray-900">Couches · {activeTheme.shortLabel ?? activeTheme.label}</span>
             <button
               type="button"
-              onClick={() => setAccidentSeverityFilter(value => value === 'all' ? 'severe' : 'all')}
-              className={`border border-gray-300 px-2 py-1 text-left ${accidentSeverityFilter === 'severe' ? 'bg-red-700 text-white' : 'bg-white text-gray-700'}`}
+              onClick={() => setShowLayerLegend(false)}
+              className="text-[10px] text-gray-400 hover:text-gray-700"
             >
-              Graves ou mortels
+              Fermer
             </button>
-            <label className="flex items-center gap-1">
-              <span>Depuis</span>
-              <input
-                type="number"
-                min={2010}
-                max={2024}
-                value={minAccidentYear}
-                onChange={(event) => setMinAccidentYear(Number(event.target.value))}
-                className="w-16 border border-gray-300 px-1 py-1"
-              />
-            </label>
+          </div>
+
+          <div className="px-3 py-2.5">
+            <div className="mb-2.5 grid grid-cols-2 gap-1">
+              <LayerToggle active={showRailLines} label="Train / tram" swatch="#eb0000" onClick={() => setShowRailLines(value => !value)} />
+              <LayerToggle active={showStations} label="Arrêts" swatch="#2563eb" onClick={() => setShowStations(value => !value)} />
+            </div>
+
+            <div className="mb-2.5">
+              <div className="mb-1.5 text-[10px] uppercase tracking-wider text-gray-400">Anneaux de marche</div>
+              <div className="grid grid-cols-2 gap-1">
+                {accessibilityRings.map(ring => (
+                  <button
+                    key={ring.id}
+                    type="button"
+                    onClick={() => setVisibleRings(prev => ({ ...prev, [ring.id]: prev[ring.id] === false }))}
+                    aria-pressed={visibleRings[ring.id] !== false}
+                    className={`flex items-center gap-1.5 border border-gray-200 px-2 py-1 text-left transition-opacity ${visibleRings[ring.id] !== false ? 'opacity-100' : 'opacity-35'}`}
+                  >
+                    <span className="h-2.5 w-4 shrink-0 border" style={{ backgroundColor: ring.fill, borderColor: ring.line }} />
+                    <span className="min-w-0 truncate">{ring.title}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="mb-2.5">
+              <div className="mb-1.5 text-[10px] uppercase tracking-wider text-gray-400">Accidents</div>
+              <div className="mb-1.5 grid grid-cols-2 gap-1">
+                <LayerToggle active={showAccidentDensity} label="Densité" swatch="#dc2626" onClick={() => setShowAccidentDensity(value => !value)} gradient />
+                <LayerToggle active={showAccidentPoints} label="Points" swatch="#7f1d1d" onClick={() => setShowAccidentPoints(value => !value)} />
+              </div>
+              <div className="grid grid-cols-3 border border-gray-200 text-[10px]">
+                {(['all', 'pedestrian', 'bike'] as const).map(value => (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => setAccidentUserFilter(value)}
+                    className={`py-1 ${accidentUserFilter === value ? 'bg-gray-900 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
+                  >
+                    {value === 'all' ? 'Tous' : value === 'pedestrian' ? 'Piétons' : 'Vélos'}
+                  </button>
+                ))}
+              </div>
+              <div className="mt-1.5 flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setAccidentSeverityFilter(value => value === 'all' ? 'severe' : 'all')}
+                  className={`flex-1 border py-1 text-[10px] ${accidentSeverityFilter === 'severe' ? 'border-red-700 bg-red-700 text-white' : 'border-gray-200 bg-white text-gray-600'}`}
+                >
+                  Graves/mortels
+                </button>
+                <label className="flex items-center gap-1 text-[10px] text-gray-500">
+                  Depuis
+                  <input
+                    type="number"
+                    min={2010}
+                    max={2024}
+                    value={minAccidentYear}
+                    onChange={(event) => setMinAccidentYear(Number(event.target.value))}
+                    className="w-14 border border-gray-200 px-1 py-0.5 text-center"
+                  />
+                </label>
+              </div>
+            </div>
+
+            <div className="mb-2.5">
+              <div className="mb-1.5 text-[10px] uppercase tracking-wider text-gray-400">Équipements accessibles</div>
+              <div className="grid grid-cols-2 gap-x-2 gap-y-1">
+                {sitgEquipmentLayers.map(({ id, label, color }) => {
+                  const isVisible = visibleEquipment[id] !== false;
+                  return (
+                    <button
+                      key={id}
+                      type="button"
+                      onClick={() => setVisibleEquipment(prev => ({ ...prev, [id]: prev[id] === false }))}
+                      aria-pressed={isVisible}
+                      className={`flex min-w-0 items-center gap-1.5 text-left transition-opacity ${isVisible ? 'opacity-100' : 'opacity-35'}`}
+                    >
+                      <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: color }} />
+                      <span className="truncate text-[10px]">{label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {sitgThematicLayers.filter(layer => activeTheme.thematicLayerIds.includes(layer.id)).length > 0 && (
+              <div>
+                <div className="mb-1.5 text-[10px] uppercase tracking-wider text-gray-400">Couches thématiques</div>
+                <div className="grid grid-cols-2 gap-x-2 gap-y-1">
+                  {sitgThematicLayers
+                    .filter(layer => activeTheme.thematicLayerIds.includes(layer.id))
+                    .map(({ id, label, color }) => {
+                      const isVisible = visibleThematicLayers[id] !== false;
+                      return (
+                        <button
+                          key={id}
+                          type="button"
+                          onClick={() => setVisibleThematicLayers(prev => ({ ...prev, [id]: prev[id] === false }))}
+                          aria-pressed={isVisible}
+                          className={`flex min-w-0 items-center gap-1.5 text-left transition-opacity ${isVisible ? 'opacity-100' : 'opacity-35'}`}
+                        >
+                          <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: color }} />
+                          <span className="truncate text-[10px]">{label}</span>
+                        </button>
+                      );
+                    })}
+                </div>
+              </div>
+            )}
           </div>
         </div>
-
-        <div className="mb-1.5 text-[10px] uppercase tracking-wider text-gray-500">Équipements publics accessibles</div>
-        <div className="grid grid-cols-2 gap-x-3 gap-y-1">
-          {sitgEquipmentLayers.map(({ id, label, color }) => {
-            const isVisible = visibleEquipment[id] !== false;
-
-            return (
-              <button
-                key={id}
-                type="button"
-                onClick={() => setVisibleEquipment(prev => ({ ...prev, [id]: prev[id] === false }))}
-                aria-pressed={isVisible}
-                className={`flex min-w-0 items-center gap-1.5 text-left transition-opacity ${isVisible ? 'opacity-100' : 'opacity-35'}`}
-              >
-                <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: color }} />
-                <span className="truncate">{label}</span>
-              </button>
-            );
-          })}
-        </div>
-
-        <div className="mb-1.5 mt-3 text-[10px] uppercase tracking-wider text-gray-500">Couches thématiques</div>
-        <div className="grid grid-cols-2 gap-x-3 gap-y-1">
-          {sitgThematicLayers
-            .filter(layer => activeTheme.thematicLayerIds.includes(layer.id))
-            .map(({ id, label, color }) => {
-            const isVisible = visibleThematicLayers[id] !== false;
-
-            return (
-              <button
-                key={id}
-                type="button"
-                onClick={() => setVisibleThematicLayers(prev => ({ ...prev, [id]: prev[id] === false }))}
-                aria-pressed={isVisible}
-                className={`flex min-w-0 items-center gap-1.5 text-left transition-opacity ${isVisible ? 'opacity-100' : 'opacity-35'}`}
-              >
-                <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: color }} />
-                <span className="truncate">{label}</span>
-              </button>
-            );
-          })}
-        </div>
-      </div>
       )}
       {!mapLoaded && (
         <div className="absolute inset-0 flex items-center justify-center bg-white/80 text-xs uppercase tracking-wider text-gray-500">

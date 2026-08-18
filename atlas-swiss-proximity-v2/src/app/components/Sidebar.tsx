@@ -24,6 +24,8 @@ interface SidebarProps {
   onSelectAll: () => void;
   contextLayers: ContextLayerConfig[];
   onContextLayerToggle: (id: string, enabled: boolean) => void;
+  showContextTab?: boolean;
+  showDisabledContextTab?: boolean;
 }
 
 export function Sidebar({
@@ -45,9 +47,13 @@ export function Sidebar({
   onSelectAll,
   contextLayers,
   onContextLayerToggle,
+  showContextTab = true,
+  showDisabledContextTab = false,
 }: SidebarProps) {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [activeSubTab, setActiveSubTab] = useState<'categories' | 'context'>('categories');
+  const isContextDisabled = !showContextTab && showDisabledContextTab;
+  const hasContextEntry = showContextTab || showDisabledContextTab;
 
   if (isCollapsed) {
     return (
@@ -65,26 +71,47 @@ export function Sidebar({
   return (
     <div className="w-80 border-r border-gray-300 bg-white flex flex-col">
       <div className="border-b border-gray-300 flex">
-        <button
-          onClick={() => setActiveSubTab('categories')}
-          className={`flex-1 border-b-2 px-4 py-3 text-xs uppercase tracking-wider transition-colors ${
-            activeSubTab === 'categories'
-              ? 'border-red-600 text-gray-900'
-              : 'border-transparent text-gray-500 hover:text-gray-900'
-          }`}
-        >
-          Catégories
-        </button>
-        <button
-          onClick={() => setActiveSubTab('context')}
-          className={`flex-1 border-b-2 px-4 py-3 text-xs uppercase tracking-wider transition-colors ${
-            activeSubTab === 'context'
-              ? 'border-red-600 text-gray-900'
-              : 'border-transparent text-gray-500 hover:text-gray-900'
-          }`}
-        >
-          Contexte
-        </button>
+        {hasContextEntry ? (
+          <>
+            <button
+              onClick={() => setActiveSubTab('categories')}
+              className={`flex-1 border-b-2 px-4 py-3 text-xs uppercase tracking-wider transition-colors ${
+                activeSubTab === 'categories'
+                  ? 'border-red-600 text-gray-900'
+                  : 'border-transparent text-gray-500 hover:text-gray-900'
+              }`}
+            >
+              Catégories
+            </button>
+            <button
+              onClick={() => {
+                if (!isContextDisabled) setActiveSubTab('context');
+              }}
+              disabled={isContextDisabled}
+              aria-label={isContextDisabled ? 'Contexte — en préparation' : 'Contexte'}
+              className={`flex-1 border-b-2 px-4 py-3 text-xs uppercase tracking-wider transition-colors ${
+                isContextDisabled
+                  ? 'cursor-not-allowed border-transparent text-gray-400'
+                  : activeSubTab === 'context'
+                  ? 'border-red-600 text-gray-900'
+                  : 'border-transparent text-gray-500 hover:text-gray-900'
+              }`}
+            >
+              <span className="inline-flex items-center gap-2">
+                Contexte
+                {isContextDisabled && (
+                  <span className="border border-gray-300 px-1.5 py-0.5 text-[9px] uppercase tracking-wider text-gray-400">
+                    WIP
+                  </span>
+                )}
+              </span>
+            </button>
+          </>
+        ) : (
+          <div className="flex-1 px-4 py-3 text-xs uppercase tracking-wider text-gray-500">
+            Paramètres
+          </div>
+        )}
         <button
           onClick={() => setIsCollapsed(true)}
           className="w-12 border-l border-gray-300 flex items-center justify-center hover:bg-gray-50 transition-colors"
@@ -93,7 +120,7 @@ export function Sidebar({
         </button>
       </div>
 
-      {activeSubTab === 'categories' ? (
+      {!showContextTab || activeSubTab === 'categories' ? (
         <ProximityPanel
           categories={categories}
           demandModes={demandModes}

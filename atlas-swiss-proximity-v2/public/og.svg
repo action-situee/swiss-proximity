@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" role="img" aria-labelledby="title desc">
+  <title id="title">Swiss Proximity</title>
+  <desc id="desc">Carte paramétrable des territoires des courtes distances par Bureau Action Située.</desc>
+  <rect width="1200" height="630" fill="#ffffff"/>
+  <rect x="0" y="0" width="1200" height="630" fill="#f8faf9"/>
+  <path d="M0 510 C180 468 250 564 420 522 C610 476 690 384 875 420 C1032 450 1110 522 1200 496 L1200 630 L0 630 Z" fill="#67a578" opacity="0.10"/>
+  <path d="M0 78 H1200" stroke="#d1d5db" stroke-width="1" opacity="0.65"/>
+  <path d="M0 552 H1200" stroke="#d1d5db" stroke-width="1" opacity="0.65"/>
+  <g transform="translate(70 92)">
+    <rect x="92" y="0" width="190" height="190" fill="#d18e7c" opacity="0.6"/>
+    <rect x="0" y="54" width="190" height="190" fill="#f4b840" opacity="0.6"/>
+    <rect x="34" y="28" width="190" height="190" fill="#67a578" opacity="0.72"/>
+    <text x="119" y="108" fill="#ffffff" font-family="Arial, sans-serif" font-size="43" font-weight="700" text-anchor="middle">action</text>
+    <text x="119" y="160" fill="#ffffff" font-family="Arial, sans-serif" font-size="43" font-weight="700" text-anchor="middle">située</text>
+  </g>
+  <text x="376" y="190" fill="#111827" font-family="Arial, sans-serif" font-size="66" font-weight="700">Swiss Proximity</text>
+  <text x="380" y="254" fill="#374151" font-family="Arial, sans-serif" font-size="34">Territoires des courtes distances</text>
+  <text x="380" y="328" fill="#4b5563" font-family="Arial, sans-serif" font-size="25">Carte paramétrable des indicateurs de proximité</text>
+  <text x="380" y="366" fill="#4b5563" font-family="Arial, sans-serif" font-size="25">pour les agglomérations transfrontalières suisses.</text>
+  <g transform="translate(380 438)">
+    <rect x="0" y="0" width="18" height="18" fill="#67a578"/>
+    <rect x="212" y="0" width="18" height="18" fill="#f4b840"/>
+    <rect x="452" y="0" width="18" height="18" fill="#d18e7c"/>
+    <text x="30" y="18" fill="#374151" font-family="Arial, sans-serif" font-size="20">proximité</text>
+    <text x="242" y="18" fill="#374151" font-family="Arial, sans-serif" font-size="20">mobilité quotidienne</text>
+    <text x="482" y="18" fill="#374151" font-family="Arial, sans-serif" font-size="20">analyse territoriale</text>
+  </g>
+  <text x="70" y="566" fill="#67a578" font-family="Arial, sans-serif" font-size="22" font-weight="700" letter-spacing="2">BUREAU ACTION SITUÉE</text>
+</svg>

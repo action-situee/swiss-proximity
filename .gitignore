@@ -12,9 +12,19 @@
 **/venv/
 
 **/.git-backup-*/
+.codex/
 
 get-data-proximity/Data/
 get-data-proximity/Notebooks/cache/
+get-data-proximity/Notebooks/*.cpg
+get-data-proximity/Notebooks/*.dbf
+get-data-proximity/Notebooks/*.prj
+get-data-proximity/Notebooks/*.shp
+get-data-proximity/Notebooks/*.shx
+get-data-proximity/Notebooks/*.ipynb
 
 atlas-swiss-proximity-v1/data_processing/source_data/
 atlas-swiss-proximity-v1/Redesign urban proximity page.zip
+
+atlas-swiss-proximity-v2/EDA/
+atlas-swiss-proximity-v2/public/data/

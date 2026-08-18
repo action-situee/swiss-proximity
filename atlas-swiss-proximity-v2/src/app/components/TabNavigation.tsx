@@ -1,4 +1,4 @@
-import { BarChart3, Info, MapPin } from 'lucide-react';
+import { BarChart3, Info } from 'lucide-react';
 
 export type TabType = 'map' | 'analysis' | 'stations';
 export type DataMode = 'proximity' | 'mobility';
@@ -12,27 +12,47 @@ interface TabNavigationProps {
   timeMode: TimeMode;
   onTimeModeChange: (mode: TimeMode) => void;
   onInfoOpen: () => void;
+  showUnpublishedSections?: boolean;
+  showWorkInProgressTabs?: boolean;
 }
 
-export function TabNavigation({ activeTab, onTabChange, dataMode, onDataModeChange, timeMode, onTimeModeChange, onInfoOpen }: TabNavigationProps) {
+export function TabNavigation({
+  activeTab,
+  onTabChange,
+  dataMode,
+  onDataModeChange,
+  timeMode,
+  onTimeModeChange,
+  onInfoOpen,
+  showUnpublishedSections = false,
+  showWorkInProgressTabs = false,
+}: TabNavigationProps) {
   const tabs = [
-    { id: 'map' as TabType, label: 'Courtes distances' },
-    { id: 'analysis' as TabType, label: 'Analyse', icon: BarChart3 },
-    { id: 'stations' as TabType, label: 'Arrêts du Léman Express', icon: MapPin },
+    { id: 'map' as TabType, label: 'Courtes distances', disabled: false },
+    ...(showUnpublishedSections
+      ? [
+          { id: 'analysis' as TabType, label: 'Analyse', icon: BarChart3, disabled: false },
+        ]
+      : []),
+    ...(!showUnpublishedSections && showWorkInProgressTabs
+      ? [
+          { id: 'analysis' as TabType, label: 'Analyse', icon: BarChart3, disabled: true, badge: 'WIP' },
+        ]
+      : []),
   ];
 
   return (
     <div className="bg-white border-b border-gray-300">
-      <div className="flex items-center justify-between px-8 py-5">
+      <div className="flex items-center justify-between gap-6 px-6 py-3">
         <div className="flex items-center gap-3">
-          <img src="/brand/situee-logo.svg" alt="située" className="h-12 w-auto" />
+          <img src="/brand/situee-logo.svg" alt="située" className="h-10 w-auto" />
           <div>
-          <h1 className="text-lg tracking-tight text-gray-900">
-            Swiss Proximity : territoires des courtes distances
-          </h1>
-          <p className="text-xs text-gray-500 mt-0.5">
-            Agglomérations transfrontalières suisses
-          </p>
+            <h1 className="text-base tracking-tight text-gray-900">
+              Swiss Proximity : territoires des courtes distances
+            </h1>
+            <p className="mt-0.5 text-xs text-gray-500">
+              Agglomérations transfrontalières suisses
+            </p>
           </div>
         </div>
 
@@ -90,27 +110,41 @@ export function TabNavigation({ activeTab, onTabChange, dataMode, onDataModeChan
           </button>
         </div>
       </div>
-      <nav className="flex gap-0 justify-center">
-        {tabs.map((tab) => {
-          const isActive = activeTab === tab.id;
-          const Icon = tab.icon;
+      {tabs.length > 1 && (
+        <nav className="flex gap-0 justify-center">
+          {tabs.map((tab) => {
+            const isActive = activeTab === tab.id;
+            const Icon = tab.icon;
 
-          return (
-            <button
-              key={tab.id}
-              onClick={() => onTabChange(tab.id)}
-              className={`flex items-center gap-2 px-5 py-2.5 border-b-2 transition-colors ${
-                isActive
-                  ? 'text-red-600 border-red-600'
-                  : 'text-gray-600 border-transparent hover:text-gray-900'
-              }`}
-            >
-              {Icon && <Icon className="w-4 h-4" />}
-              <span className="text-sm">{tab.label}</span>
-            </button>
-          );
-        })}
-      </nav>
+            return (
+              <button
+                key={tab.id}
+                onClick={() => {
+                  if (!tab.disabled) onTabChange(tab.id);
+                }}
+                disabled={tab.disabled}
+                aria-label={tab.disabled ? `${tab.label} — en préparation` : tab.label}
+                className={`flex items-center gap-2 px-5 py-2.5 border-b-2 transition-colors ${
+                  tab.disabled
+                    ? 'cursor-not-allowed border-transparent text-gray-400'
+                    :
+                  isActive
+                    ? 'text-red-600 border-red-600'
+                    : 'text-gray-600 border-transparent hover:text-gray-900'
+                }`}
+              >
+                {Icon && <Icon className="w-4 h-4" />}
+                <span className="text-sm">{tab.label}</span>
+                {'badge' in tab && tab.badge && (
+                  <span className="border border-gray-300 px-1.5 py-0.5 text-[9px] uppercase tracking-wider text-gray-400">
+                    {tab.badge}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </nav>
+      )}
     </div>
   );
 }
